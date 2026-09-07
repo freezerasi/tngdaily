@@ -98,7 +98,13 @@ export async function ingestRemoteImage(
 
   return {
     publicId: result.public_id,
-    url: result.secure_url,
+    url:
+      cloudinaryUrl(result.public_id, {
+        width: 1600,
+        crop: "limit",
+        quality: "auto",
+        format: "webp",
+      }) ?? result.secure_url,
     width: result.width ?? null,
     height: result.height ?? null,
   };
@@ -120,13 +126,14 @@ export function cloudinaryUrl(
     height?: number;
     crop?: "fill" | "fit" | "limit";
     quality?: "auto" | number;
+    format?: "auto" | "webp";
   } = {},
 ): string | null {
   const cloudName = cloudinaryConfig.cloudName;
   if (!cloudName) return null;
 
   const parts = [
-    "f_auto",
+    `f_${options.format ?? "auto"}`,
     `q_${options.quality ?? "auto"}`,
     options.width ? `w_${options.width}` : null,
     options.height ? `h_${options.height}` : null,

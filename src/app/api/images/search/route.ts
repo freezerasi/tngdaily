@@ -39,11 +39,11 @@ export async function GET(request: NextRequest) {
 
   const params = request.nextUrl.searchParams;
   const parsed = imageSearchSchema.safeParse({
-    provider: params.get("provider"),
+    provider: params.get("provider") ?? "all",
     query: params.get("query"),
     page: params.get("page") ?? undefined,
-    perPage: params.get("perPage") ?? undefined,
-    orientation: params.get("orientation") ?? undefined,
+    perPage: "20",
+    orientation: "landscape",
   });
 
   if (!parsed.success) {

@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { ImagePlus, Loader2, Search, Upload } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ImagePlus,
+  Loader2,
+  Search,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -50,6 +57,18 @@ interface StockPhoto {
 }
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const STOCK_PAGE_SIZE = 20;
+
+function providerLabel(provider: StockPhoto["provider"]): string {
+  switch (provider) {
+    case "unsplash":
+      return "Unsplash";
+    case "pexels":
+      return "Pexels";
+    case "pixabay":
+      return "Pixabay";
+  }
+}
 
 export function ImagePicker({
   onPick,
@@ -87,9 +106,7 @@ export function ImagePicker({
                 <Upload aria-hidden="true" className="size-3.5" />
                 Upload
               </TabsTrigger>
-              <TabsTrigger value="pexels">Pexels</TabsTrigger>
-              <TabsTrigger value="unsplash">Unsplash</TabsTrigger>
-              <TabsTrigger value="pixabay">Pixabay</TabsTrigger>
+              <TabsTrigger value="stock">Foto stok</TabsTrigger>
             </TabsList>
 
             <TabsContent value="upload">
@@ -101,19 +118,16 @@ export function ImagePicker({
               />
             </TabsContent>
 
-            {(["pexels", "unsplash", "pixabay"] as const).map((provider) => (
-              <TabsContent key={provider} value={provider}>
-                <StockPanel
-                  provider={provider}
-                  {...(articleId ? { articleId } : {})}
-                  {...(suggestedQuery ? { suggestedQuery } : {})}
-                  onDone={(image) => {
-                    onPick(image);
-                    setOpen(false);
-                  }}
-                />
-              </TabsContent>
-            ))}
+            <TabsContent value="stock">
+              <StockPanel
+                {...(articleId ? { articleId } : {})}
+                {...(suggestedQuery ? { suggestedQuery } : {})}
+                onDone={(image) => {
+                  onPick(image);
+                  setOpen(false);
+                }}
+              />
+            </TabsContent>
           </Tabs>
         </DialogBody>
       </DialogContent>
@@ -258,17 +272,17 @@ function UploadPanel({ onDone }: { onDone: (image: PickedImage) => void }) {
 }
 
 function StockPanel({
-  provider,
   articleId,
   suggestedQuery,
   onDone,
 }: {
-  provider: "unsplash" | "pexels" | "pixabay";
   articleId?: string;
   suggestedQuery?: string;
   onDone: (image: PickedImage) => void;
 }) {
   const [query, setQuery] = React.useState(suggestedQuery ?? "");
+  const [page, setPage] = React.useState(1);
+  const [lastQuery, setLastQuery] = React.useState("");
   const [photos, setPhotos] = React.useState<StockPhoto[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [ingestingId, setIngestingId] = React.useState<string | null>(null);
@@ -279,18 +293,19 @@ function StockPanel({
     note: string | null;
   }>({ remaining: null, total: null, note: null });
 
-  const search = async (event?: React.FormEvent) => {
-    event?.preventDefault();
-    const term = query.trim();
+  const searchPage = async (nextPage: number, nextQuery = query) => {
+    const term = nextQuery.trim();
     if (term.length < 2) return;
 
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
-        provider,
+        provider: "all",
         query: term,
-        perPage: "18",
+        page: String(nextPage),
+        perPage: String(STOCK_PAGE_SIZE),
+        orientation: "landscape",
       });
       const response = await fetch(`/api/images/search?${params.toString()}`);
       const payload = (await response.json()) as {
@@ -306,6 +321,8 @@ function StockPanel({
       }
 
       setPhotos(payload.photos ?? []);
+      setPage(nextPage);
+      setLastQuery(term);
       setQuota({
         remaining: payload.rateLimitRemaining ?? null,
         total: payload.rateLimitTotal ?? null,
@@ -317,6 +334,11 @@ function StockPanel({
     } finally {
       setLoading(false);
     }
+  };
+
+  const search = async (event?: React.FormEvent) => {
+    event?.preventDefault();
+    await searchPage(1);
   };
 
   const pick = async (photo: StockPhoto) => {
@@ -369,11 +391,11 @@ function StockPanel({
   return (
     <div className="grid gap-3">
       <form onSubmit={search} className="flex flex-wrap gap-2">
-        <label htmlFor={`stock-${provider}`} className="sr-only">
+        <label htmlFor="stock-all" className="sr-only">
           Kata kunci gambar
         </label>
         <Input
-          id={`stock-${provider}`}
+          id="stock-all"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="young people coffee shop indonesia"
@@ -391,7 +413,8 @@ function StockPanel({
       </form>
 
       <p className="text-[0.8125rem] text-muted">
-        Kata kunci dalam Bahasa Inggris biasanya memberi hasil lebih relevan.
+        Mencari foto landscape dari Unsplash, Pexels, dan Pixabay jika API key aktif.
+        Kata kunci Bahasa Inggris biasanya memberi hasil lebih relevan.
         {quota.remaining !== null
           ? ` Kuota tersisa: ${quota.remaining}${quota.total ? `/${quota.total}` : ""}.`
           : ""}
@@ -413,47 +436,79 @@ function StockPanel({
       ) : null}
 
       {photos.length > 0 ? (
-        <ul className="grid max-h-[26rem] grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
-          {photos.map((photo) => (
-            <li key={photo.id}>
-              <button
-                type="button"
-                onClick={() => void pick(photo)}
-                disabled={ingestingId !== null}
-                className="group block w-full border-2 border-line bg-wall-deep text-left transition-colors hover:border-lime disabled:opacity-60"
-              >
-                <span className="relative block aspect-[4/3] w-full overflow-hidden border-b-2 border-line">
-                  {photo.previewUrl ? (
-                    <Image
-                      src={photo.previewUrl}
-                      alt={photo.altText}
-                      fill
-                      sizes="(min-width: 640px) 240px, 45vw"
-                      className="object-cover"
-                      unoptimized
-                    />
-                  ) : null}
-                  {ingestingId === photo.id ? (
-                    <span className="absolute inset-0 flex items-center justify-center bg-wall/80">
-                      <Loader2
-                        aria-hidden="true"
-                        className="size-5 animate-spin text-lime"
+        <>
+          <ul className="grid max-h-[26rem] grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
+            {photos.map((photo) => (
+              <li key={photo.id}>
+                <button
+                  type="button"
+                  onClick={() => void pick(photo)}
+                  disabled={ingestingId !== null}
+                  className="group block w-full border-2 border-line bg-wall-deep text-left transition-colors hover:border-lime disabled:opacity-60"
+                >
+                  <span className="relative block aspect-video w-full overflow-hidden border-b-2 border-line">
+                    {photo.previewUrl ? (
+                      <Image
+                        src={photo.previewUrl}
+                        alt={photo.altText}
+                        fill
+                        sizes="(min-width: 640px) 240px, 45vw"
+                        className="object-cover"
+                        unoptimized
                       />
-                    </span>
-                  ) : null}
-                </span>
-                <span className="block p-2">
-                  <span className="block truncate text-[0.75rem] text-foreground">
-                    {photo.photographerName}
+                    ) : null}
+                    {ingestingId === photo.id ? (
+                      <span className="absolute inset-0 flex items-center justify-center bg-wall/80">
+                        <Loader2
+                          aria-hidden="true"
+                          className="size-5 animate-spin text-lime"
+                        />
+                      </span>
+                    ) : null}
                   </span>
-                  <TapePatch tone="outline" size="sm" className="mt-1">
-                    {photo.provider}
-                  </TapePatch>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+                  <span className="block p-2">
+                    <span className="block truncate text-[0.75rem] text-foreground">
+                      {photo.photographerName}
+                    </span>
+                    <span className="mt-1 flex min-h-6 items-center justify-between gap-2">
+                      <TapePatch tone="outline" size="sm">
+                        {providerLabel(photo.provider)}
+                      </TapePatch>
+                      <span className="min-w-0 truncate text-[0.6875rem] text-muted">
+                        {photo.attributionText}
+                      </span>
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || page <= 1}
+              onClick={() => void searchPage(Math.max(1, page - 1), lastQuery)}
+            >
+              <ChevronLeft aria-hidden="true" />
+              Sebelumnya
+            </Button>
+            <span className="text-[0.75rem] font-semibold text-muted">
+              Halaman {page}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || photos.length < STOCK_PAGE_SIZE}
+              onClick={() => void searchPage(page + 1, lastQuery)}
+            >
+              Berikutnya
+              <ChevronRight aria-hidden="true" />
+            </Button>
+          </div>
+        </>
       ) : null}
 
       {!loading && photos.length === 0 && !error ? (

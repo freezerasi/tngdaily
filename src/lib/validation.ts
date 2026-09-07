@@ -124,11 +124,11 @@ export const moderationSchema = z.object({
 });
 
 export const imageSearchSchema = z.object({
-  provider: z.enum(["unsplash", "pexels", "pixabay"]),
+  provider: z.enum(["all", "unsplash", "pexels", "pixabay"]).default("all"),
   query: z.string().trim().min(2, "Kata kunci minimal 2 karakter.").max(120),
   page: z.coerce.number().int().min(1).max(20).default(1),
-  perPage: z.coerce.number().int().min(6).max(30).default(18),
-  orientation: z.enum(["landscape", "portrait", "squarish", "any"]).default("any"),
+  perPage: z.coerce.number().int().min(20).max(20).default(20),
+  orientation: z.enum(["landscape"]).default("landscape"),
 });
 export type ImageSearchQuery = z.infer<typeof imageSearchSchema>;
 

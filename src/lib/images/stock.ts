@@ -13,7 +13,7 @@ import type { ImageSearchQuery } from "@/lib/validation";
 
 export interface StockPhoto {
   id: string;
-  provider: "unsplash" | "pexels" | "pixabay";
+  provider: StockProvider;
   thumbUrl: string;
   previewUrl: string;
   fullUrl: string;
@@ -25,6 +25,8 @@ export interface StockPhoto {
   sourcePageUrl: string;
   attributionText: string;
 }
+
+export type StockProvider = "unsplash" | "pexels" | "pixabay";
 
 export interface StockSearchResult {
   photos: StockPhoto[];
@@ -46,6 +48,33 @@ export class StockSearchError extends Error {
 }
 
 const TIMEOUT_MS = 10_000;
+const AGGREGATE_PAGE_SIZE: Record<StockProvider, number> = {
+  unsplash: 7,
+  pexels: 7,
+  pixabay: 6,
+};
+const PROVIDER_LABELS: Record<StockProvider, string> = {
+  unsplash: "Unsplash",
+  pexels: "Pexels",
+  pixabay: "Pixabay",
+};
+
+type ProviderSearchQuery = Omit<ImageSearchQuery, "provider"> & {
+  provider: StockProvider;
+};
+
+function hasImageUrls(photo: StockPhoto): boolean {
+  return Boolean(photo.thumbUrl && photo.previewUrl && photo.fullUrl);
+}
+
+function isLandscape(photo: StockPhoto): boolean {
+  if (!photo.width || !photo.height) return true;
+  return photo.width > photo.height;
+}
+
+function cleanPhotos(photos: StockPhoto[]): StockPhoto[] {
+  return photos.filter((photo) => hasImageUrls(photo) && isLandscape(photo));
+}
 
 async function fetchJson(
   url: string,
@@ -116,7 +145,7 @@ interface UnsplashPhoto {
 }
 
 async function searchUnsplash(
-  query: ImageSearchQuery,
+  query: ProviderSearchQuery,
 ): Promise<StockSearchResult> {
   const key = stockPhotoKeys.unsplash;
   if (!key) {
@@ -130,9 +159,7 @@ async function searchUnsplash(
   url.searchParams.set("query", query.query);
   url.searchParams.set("page", String(query.page));
   url.searchParams.set("per_page", String(query.perPage));
-  if (query.orientation !== "any") {
-    url.searchParams.set("orientation", query.orientation);
-  }
+  url.searchParams.set("orientation", "landscape");
 
   const { payload, headers } = await fetchJson(url.toString(), {
     Authorization: `Client-ID ${key}`,
@@ -144,7 +171,7 @@ async function searchUnsplash(
   const limit = Number(headers.get("x-ratelimit-limit") ?? "");
 
   return {
-    photos: (body.results ?? []).map((photo) => {
+    photos: cleanPhotos((body.results ?? []).map((photo) => {
       const name = photo.user?.name ?? "Fotografer Unsplash";
       const profile = photo.user?.links?.html ?? null;
       return {
@@ -164,7 +191,7 @@ async function searchUnsplash(
         sourcePageUrl: photo.links?.html ?? "https://unsplash.com",
         attributionText: `Foto oleh ${name} di Unsplash`,
       };
-    }),
+    })),
     total: body.total ?? 0,
     rateLimitRemaining: Number.isFinite(remaining) ? remaining : null,
     rateLimitTotal: Number.isFinite(limit) ? limit : null,
@@ -194,7 +221,9 @@ interface PexelsPhoto {
   };
 }
 
-async function searchPexels(query: ImageSearchQuery): Promise<StockSearchResult> {
+async function searchPexels(
+  query: ProviderSearchQuery,
+): Promise<StockSearchResult> {
   const key = stockPhotoKeys.pexels;
   if (!key) {
     throw new StockSearchError(
@@ -207,12 +236,7 @@ async function searchPexels(query: ImageSearchQuery): Promise<StockSearchResult>
   url.searchParams.set("query", query.query);
   url.searchParams.set("page", String(query.page));
   url.searchParams.set("per_page", String(query.perPage));
-  if (query.orientation !== "any") {
-    url.searchParams.set(
-      "orientation",
-      query.orientation === "squarish" ? "square" : query.orientation,
-    );
-  }
+  url.searchParams.set("orientation", "landscape");
 
   const { payload, headers } = await fetchJson(url.toString(), {
     Authorization: key,
@@ -223,7 +247,7 @@ async function searchPexels(query: ImageSearchQuery): Promise<StockSearchResult>
   const limit = Number(headers.get("x-ratelimit-limit") ?? "");
 
   return {
-    photos: (body.photos ?? []).map((photo) => {
+    photos: cleanPhotos((body.photos ?? []).map((photo) => {
       const name = photo.photographer ?? "Fotografer Pexels";
       return {
         id: `pexels-${photo.id}`,
@@ -239,7 +263,7 @@ async function searchPexels(query: ImageSearchQuery): Promise<StockSearchResult>
         sourcePageUrl: photo.url ?? "https://www.pexels.com",
         attributionText: `Foto oleh ${name} di Pexels`,
       };
-    }),
+    })),
     total: body.total_results ?? 0,
     rateLimitRemaining: Number.isFinite(remaining) ? remaining : null,
     rateLimitTotal: Number.isFinite(limit) ? limit : null,
@@ -264,7 +288,9 @@ interface PixabayHit {
   user_id?: number;
 }
 
-async function searchPixabay(query: ImageSearchQuery): Promise<StockSearchResult> {
+async function searchPixabay(
+  query: ProviderSearchQuery,
+): Promise<StockSearchResult> {
   const key = stockPhotoKeys.pixabay;
   if (!key) {
     throw new StockSearchError(
@@ -279,19 +305,14 @@ async function searchPixabay(query: ImageSearchQuery): Promise<StockSearchResult
   url.searchParams.set("page", String(query.page));
   url.searchParams.set("per_page", String(query.perPage));
   url.searchParams.set("image_type", "photo");
+  url.searchParams.set("orientation", "horizontal");
   url.searchParams.set("safesearch", "true");
-  if (query.orientation === "landscape" || query.orientation === "portrait") {
-    url.searchParams.set(
-      "orientation",
-      query.orientation === "landscape" ? "horizontal" : "vertical",
-    );
-  }
 
   const { payload } = await fetchJson(url.toString(), {});
   const body = payload as { hits?: PixabayHit[]; totalHits?: number };
 
   return {
-    photos: (body.hits ?? []).map((hit) => {
+    photos: cleanPhotos((body.hits ?? []).map((hit) => {
       const name = hit.user ?? "Kontributor Pixabay";
       return {
         id: `pixabay-${hit.id}`,
@@ -309,7 +330,7 @@ async function searchPixabay(query: ImageSearchQuery): Promise<StockSearchResult
         sourcePageUrl: hit.pageURL ?? "https://pixabay.com",
         attributionText: `Gambar oleh ${name} di Pixabay`,
       };
-    }),
+    })),
     total: body.totalHits ?? 0,
     rateLimitRemaining: null,
     rateLimitTotal: null,
@@ -317,8 +338,8 @@ async function searchPixabay(query: ImageSearchQuery): Promise<StockSearchResult
   };
 }
 
-export function searchStockPhotos(
-  query: ImageSearchQuery,
+async function searchProvider(
+  query: ProviderSearchQuery,
 ): Promise<StockSearchResult> {
   switch (query.provider) {
     case "unsplash":
@@ -330,12 +351,116 @@ export function searchStockPhotos(
   }
 }
 
-export function configuredStockProviders(): Array<
-  "unsplash" | "pexels" | "pixabay"
-> {
-  const providers: Array<"unsplash" | "pexels" | "pixabay"> = [];
-  if (stockPhotoKeys.pexels) providers.push("pexels");
+function interleaveByProvider(results: Partial<Record<StockProvider, StockPhoto[]>>) {
+  const orderedProviders: StockProvider[] = ["unsplash", "pexels", "pixabay"];
+  const mixed: StockPhoto[] = [];
+  const max = Math.max(
+    0,
+    ...orderedProviders.map((provider) => results[provider]?.length ?? 0),
+  );
+
+  for (let index = 0; index < max; index += 1) {
+    for (const provider of orderedProviders) {
+      const photo = results[provider]?.[index];
+      if (photo) mixed.push(photo);
+    }
+  }
+
+  return mixed;
+}
+
+async function searchAllProviders(
+  query: ImageSearchQuery,
+): Promise<StockSearchResult> {
+  const providers = configuredStockProviders();
+  const missingProviders = (["unsplash", "pexels", "pixabay"] as const).filter(
+    (provider) => !providers.includes(provider),
+  );
+  if (providers.length === 0) {
+    throw new StockSearchError(
+      503,
+      "Belum ada API key provider foto stok yang diset.",
+    );
+  }
+
+  const settled = await Promise.allSettled(
+    providers.map(async (provider) => {
+      const result = await searchProvider({
+        ...query,
+        provider,
+        perPage: AGGREGATE_PAGE_SIZE[provider],
+        orientation: "landscape",
+      });
+      return { provider, result };
+    }),
+  );
+
+  const photosByProvider: Partial<Record<StockProvider, StockPhoto[]>> = {};
+  const notes = missingProviders.length
+    ? [
+        `Provider belum aktif: ${missingProviders
+          .map((provider) => PROVIDER_LABELS[provider])
+          .join(", ")}.`,
+      ]
+    : [];
+  let total = 0;
+  let rateLimitRemaining: number | null = null;
+  let rateLimitTotal: number | null = null;
+
+  for (const item of settled) {
+    if (item.status === "rejected") {
+      const reason = item.reason;
+      notes.push(
+        reason instanceof Error
+          ? reason.message
+          : "Salah satu provider gagal memuat gambar.",
+      );
+      continue;
+    }
+
+    const { provider, result } = item.value;
+    photosByProvider[provider] = result.photos.slice(0, AGGREGATE_PAGE_SIZE[provider]);
+    total += result.total;
+    rateLimitRemaining ??= result.rateLimitRemaining;
+    rateLimitTotal ??= result.rateLimitTotal;
+    if (result.providerNote) notes.push(result.providerNote);
+  }
+
+  const photos = interleaveByProvider(photosByProvider).slice(0, 20);
+
+  if (photos.length === 0 && notes.length > 0) {
+    throw new StockSearchError(502, notes[0] ?? "Pencarian gambar gagal.");
+  }
+
+  return {
+    photos,
+    total,
+    rateLimitRemaining,
+    rateLimitTotal,
+    providerNote:
+      notes.length > 0 ? Array.from(new Set(notes)).join(" ") : null,
+  };
+}
+
+export function searchStockPhotos(
+  query: ImageSearchQuery,
+): Promise<StockSearchResult> {
+  if (query.provider === "all") {
+    return searchAllProviders(query);
+  }
+
+  return searchProvider({
+    ...query,
+    provider: query.provider,
+    perPage: 20,
+    orientation: "landscape",
+  });
+}
+
+export function configuredStockProviders(): StockProvider[] {
+  const providers: StockProvider[] = [];
   if (stockPhotoKeys.unsplash) providers.push("unsplash");
+  if (stockPhotoKeys.pexels) providers.push("pexels");
   if (stockPhotoKeys.pixabay) providers.push("pixabay");
   return providers;
 }
