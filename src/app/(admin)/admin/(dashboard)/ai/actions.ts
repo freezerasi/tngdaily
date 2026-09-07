@@ -5,12 +5,18 @@ import { revalidatePath } from "next/cache";
 import { getApiAuth } from "@/lib/auth";
 import { getAdminSupabase, getServerSupabase } from "@/lib/supabase/server";
 import { getSecretStore, SecretStoreError } from "@/lib/ai/secrets";
-import { testCandidate, type GatewayCandidate } from "@/lib/ai/gateway";
+import {
+  detectCandidateModels,
+  testCandidate,
+  type GatewayCandidate,
+} from "@/lib/ai/gateway";
 import {
   aiApiKeySchema,
   aiKeyReorderSchema,
   aiKeyStatusSchema,
+  aiModelStatusSchema,
   aiProviderSchema,
+  aiTaskModelSettingsSchema,
   fieldErrors,
   uuidSchema,
 } from "@/lib/validation";
@@ -54,7 +60,7 @@ export async function createProviderAction(
   const { error } = await supabase.from("ai_providers").insert({
     name: parsed.data.name,
     base_url: parsed.data.baseUrl.replace(/\/+$/, ""),
-    default_model: parsed.data.defaultModel,
+    default_model: parsed.data.defaultModel || null,
     is_active: parsed.data.isActive,
     notes: parsed.data.notes || null,
     created_by: auth.profile.id,
@@ -70,6 +76,100 @@ export async function createProviderAction(
 
   refresh();
   return { ok: true, message: "Provider ditambahkan." };
+}
+
+export async function detectProviderModelsAction(
+  providerId: string,
+): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa mendeteksi model AI.");
+
+  const id = uuidSchema.safeParse(providerId);
+  if (!id.success) return fail("ID provider tidak valid.");
+
+  const admin = getAdminSupabase();
+  if (!admin) return fail("Database belum dikonfigurasi.");
+
+  const { data: providerData } = await admin
+    .from("ai_providers")
+    .select("id, name, base_url, default_model")
+    .eq("id", id.data)
+    .maybeSingle();
+
+  const provider = providerData as
+    | {
+        id: string;
+        name: string;
+        base_url: string;
+        default_model: string | null;
+      }
+    | null;
+
+  if (!provider) return fail("Provider tidak ditemukan.");
+
+  const { data: keyRows } = await admin
+    .from("ai_api_keys")
+    .select("id, provider_id, vault_secret_id, priority, status")
+    .eq("provider_id", provider.id)
+    .in("status", ["active", "rate_limited"])
+    .order("priority", { ascending: true })
+    .limit(4);
+
+  const key = (
+    (keyRows as Array<{
+      id: string;
+      provider_id: string;
+      vault_secret_id: string;
+      priority: number;
+      status: string;
+    }> | null) ?? []
+  ).sort((a, b) => {
+    const rank = (status: string) => (status === "active" ? 0 : 1);
+    return rank(a.status) - rank(b.status) || a.priority - b.priority;
+  })[0];
+
+  if (!key) return fail("Tambahkan API key aktif sebelum mendeteksi model.");
+
+  const result = await detectCandidateModels({
+    keyId: key.id,
+    providerId: provider.id,
+    providerName: provider.name,
+    baseUrl: provider.base_url,
+    model: provider.default_model ?? "",
+    priority: key.priority,
+    isLocalFallback: false,
+    secretId: key.vault_secret_id,
+  });
+
+  if (!result.ok) return fail(`${provider.name}: ${result.message}`);
+
+  const now = new Date().toISOString();
+  const rows = result.models.map((model) => ({
+    provider_id: provider.id,
+    model_key: model,
+    display_name: model,
+    source: "detected",
+    last_seen_at: now,
+  }));
+
+  const { error } = await admin
+    .from("ai_models")
+    .upsert(rows, { onConflict: "provider_id,model_key" });
+
+  if (error) return fail("Daftar model gagal disimpan.");
+
+  if (!provider.default_model && result.models[0]) {
+    await admin
+      .from("ai_providers")
+      .update({ default_model: result.models[0] })
+      .eq("id", provider.id);
+  }
+
+  refresh();
+  return {
+    ok: true,
+    message: `${provider.name}: ${result.models.length} model terdeteksi dalam ${result.latencyMs} ms.`,
+  };
 }
 
 export async function toggleProviderAction(
@@ -262,6 +362,88 @@ export async function setKeyStatusAction(
         ? "Key diaktifkan kembali."
         : "Key dinonaktifkan.",
   };
+}
+
+export async function setModelStatusAction(raw: unknown): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa mengubah model AI.");
+
+  const parsed = aiModelStatusSchema.safeParse(raw);
+  if (!parsed.success) return fail("Permintaan model tidak valid.");
+
+  const admin = getAdminSupabase();
+  if (!admin) return fail("Database belum dikonfigurasi.");
+
+  const { error } = await admin
+    .from("ai_models")
+    .update({ is_enabled: parsed.data.isEnabled })
+    .eq("id", parsed.data.modelId);
+
+  if (error) return fail("Status model gagal disimpan.");
+
+  if (!parsed.data.isEnabled) {
+    await admin
+      .from("ai_task_models")
+      .update({ is_enabled: false })
+      .eq("model_id", parsed.data.modelId);
+  }
+
+  refresh();
+  return {
+    ok: true,
+    message: parsed.data.isEnabled ? "Model diaktifkan." : "Model dinonaktifkan.",
+  };
+}
+
+export async function saveTaskModelSettingsAction(
+  raw: unknown,
+): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa mengatur model task.");
+
+  const parsed = aiTaskModelSettingsSchema.safeParse(raw);
+  if (!parsed.success) return fail("Pengaturan model belum valid.");
+
+  const admin = getAdminSupabase();
+  if (!admin) return fail("Database belum dikonfigurasi.");
+
+  const modelIds = Array.from(new Set(parsed.data.modelIds));
+  if (modelIds.length > 0) {
+    const { data: models, error: modelError } = await admin
+      .from("ai_models")
+      .select("id")
+      .in("id", modelIds)
+      .eq("is_enabled", true);
+
+    if (modelError) return fail("Model gagal diperiksa.");
+    if (((models as Array<{ id: string }> | null) ?? []).length !== modelIds.length) {
+      return fail("Ada model yang tidak aktif atau tidak ditemukan.");
+    }
+  }
+
+  const { error: deleteError } = await admin
+    .from("ai_task_models")
+    .delete()
+    .eq("task_type", parsed.data.taskType);
+
+  if (deleteError) return fail("Pengaturan lama gagal diganti.");
+
+  if (modelIds.length > 0) {
+    const { error: insertError } = await admin.from("ai_task_models").insert(
+      modelIds.map((modelId, index) => ({
+        task_type: parsed.data.taskType,
+        model_id: modelId,
+        priority: (index + 1) * 10,
+        is_enabled: true,
+        created_by: auth.profile.id,
+      })),
+    );
+
+    if (insertError) return fail("Pengaturan model gagal disimpan.");
+  }
+
+  refresh();
+  return { ok: true, message: "Pengaturan model task disimpan." };
 }
 
 export async function deleteApiKeyAction(

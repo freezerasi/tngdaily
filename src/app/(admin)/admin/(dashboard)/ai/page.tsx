@@ -7,7 +7,12 @@ import { BannerPanel } from "@/components/shared/banner-panel";
 import { TapePatch } from "@/components/shared/tape-patch";
 import { SetupNotice } from "@/components/shared/empty-state";
 import { requireRole } from "@/lib/auth";
-import { getUsageStats, listProvidersWithKeys, listUsageLog } from "@/lib/data/ai";
+import {
+  getUsageStats,
+  listProvidersWithKeys,
+  listTaskModelSettings,
+  listUsageLog,
+} from "@/lib/data/ai";
 import { listPromptTemplates } from "@/lib/ai/prompts";
 import { secretStoreStatus } from "@/lib/ai/secrets";
 import { isSupabaseAdminConfigured } from "@/lib/env";
@@ -22,12 +27,14 @@ export const dynamic = "force-dynamic";
 export default async function AiConfigPage() {
   await requireRole("owner", { returnTo: "/admin/ai" });
 
-  const [providers, usageLog, usageStats, templates] = await Promise.all([
-    listProvidersWithKeys(),
-    listUsageLog(30),
-    getUsageStats(7),
-    listPromptTemplates(),
-  ]);
+  const [providers, taskModelSettings, usageLog, usageStats, templates] =
+    await Promise.all([
+      listProvidersWithKeys(),
+      listTaskModelSettings(),
+      listUsageLog(30),
+      getUsageStats(7),
+      listPromptTemplates(),
+    ]);
 
   const store = secretStoreStatus();
   const adminReady = isSupabaseAdminConfigured();
@@ -80,6 +87,7 @@ export default async function AiConfigPage() {
 
       <AiProviderManager
         providers={providers.data}
+        taskModelSettings={taskModelSettings.data}
         source={providers.source}
         canWrite={adminReady && store.ready}
       />

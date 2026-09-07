@@ -140,11 +140,40 @@ export interface AiProviderView {
   id: string;
   name: string;
   baseUrl: string;
-  defaultModel: string;
+  defaultModel: string | null;
   isActive: boolean;
   notes: string | null;
   createdAt: string;
   keys: AiApiKeyView[];
+  models: AiModelView[];
+}
+
+export interface AiModelView {
+  id: string;
+  providerId: string;
+  providerName: string;
+  modelKey: string;
+  displayName: string | null;
+  isEnabled: boolean;
+  source: "detected" | "manual";
+  lastSeenAt: string | null;
+  createdAt: string;
+}
+
+export interface AiTaskModelEntryView {
+  id: string;
+  taskType: AiTaskType;
+  modelId: string;
+  modelKey: string;
+  providerId: string;
+  providerName: string;
+  priority: number;
+  isEnabled: boolean;
+}
+
+export interface AiTaskModelSettingView {
+  taskType: AiTaskType;
+  models: AiTaskModelEntryView[];
 }
 
 /** Never carries the secret or its vault reference to the browser. */

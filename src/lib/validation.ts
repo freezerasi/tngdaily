@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  AI_TASK_TYPES,
   ARTICLE_STATUSES,
   CONTRIBUTION_STATUSES,
   IMAGE_SOURCES,
@@ -17,6 +18,7 @@ import {
 
 export const pillarSchema = z.enum(PILLARS);
 export const articleStatusSchema = z.enum(ARTICLE_STATUSES);
+export const aiTaskTypeSchema = z.enum(AI_TASK_TYPES);
 export const reactionTypeSchema = z.enum(REACTION_TYPES);
 export const contributionStatusSchema = z.enum(CONTRIBUTION_STATUSES);
 export const imageSourceSchema = z.enum(IMAGE_SOURCES);
@@ -155,7 +157,7 @@ export const aiProviderSchema = z.object({
         /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(value),
       "Base URL harus https, kecuali localhost untuk development.",
     ),
-  defaultModel: z.string().trim().min(1, "Nama model wajib diisi.").max(120),
+  defaultModel: z.string().trim().max(120).optional().or(z.literal("")),
   isActive: z.boolean().default(true),
   notes: z.string().trim().max(400).optional().or(z.literal("")),
 });
@@ -179,6 +181,16 @@ export const aiKeyReorderSchema = z.object({
 export const aiKeyStatusSchema = z.object({
   keyId: uuidSchema,
   status: z.enum(["active", "disabled"]),
+});
+
+export const aiModelStatusSchema = z.object({
+  modelId: uuidSchema,
+  isEnabled: z.boolean(),
+});
+
+export const aiTaskModelSettingsSchema = z.object({
+  taskType: aiTaskTypeSchema,
+  modelIds: z.array(uuidSchema).max(12),
 });
 
 export const rewriteExtractSchema = z.object({

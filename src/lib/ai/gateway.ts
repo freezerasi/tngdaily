@@ -13,7 +13,12 @@ import {
   type ClassifiedFailure,
 } from "@/lib/ai/fallback";
 import { extractJson } from "@/lib/ai/json";
-import type { AiApiKeyRow, AiProviderRow } from "@/types/database";
+import type {
+  AiApiKeyRow,
+  AiModelRow,
+  AiProviderRow,
+  AiTaskModelRow,
+} from "@/types/database";
 import type { AiTaskType } from "@/types/domain";
 
 /**
@@ -94,11 +99,18 @@ export const ALL_PROVIDERS_FAILED =
  * Active keys ordered by priority, capped at MAX_CANDIDATES so a long chain
  * cannot balloon latency without benefit.
  */
-export async function resolveCandidates(): Promise<GatewayCandidate[]> {
+export async function resolveCandidates(
+  task?: AiTaskType,
+): Promise<GatewayCandidate[]> {
   const admin = getAdminSupabase();
   const candidates: GatewayCandidate[] = [];
 
   if (admin) {
+    if (task) {
+      const routed = await resolveTaskCandidates(task);
+      if (routed.length > 0) return routed;
+    }
+
     const { data: keyRows } = await admin
       .from("ai_api_keys")
       .select("*")
@@ -133,6 +145,7 @@ export async function resolveCandidates(): Promise<GatewayCandidate[]> {
       for (const key of ordered) {
         const provider = providers.get(key.provider_id);
         if (!provider) continue;
+        if (!provider.default_model) continue;
         candidates.push({
           keyId: key.id,
           providerId: provider.id,
@@ -170,6 +183,89 @@ export async function resolveCandidates(): Promise<GatewayCandidate[]> {
   }
 
   return candidates;
+}
+
+async function resolveTaskCandidates(
+  task: AiTaskType,
+): Promise<GatewayCandidate[]> {
+  const admin = getAdminSupabase();
+  if (!admin) return [];
+
+  const { data: routeRows } = await admin
+    .from("ai_task_models")
+    .select("*")
+    .eq("task_type", task)
+    .eq("is_enabled", true)
+    .order("priority", { ascending: true })
+    .limit(MAX_CANDIDATES * 3);
+
+  const routes = (routeRows as AiTaskModelRow[] | null) ?? [];
+  if (routes.length === 0) return [];
+
+  const modelIds = Array.from(new Set(routes.map((route) => route.model_id)));
+  const { data: modelRows } = await admin
+    .from("ai_models")
+    .select("*")
+    .in("id", modelIds)
+    .eq("is_enabled", true);
+
+  const models = (modelRows as AiModelRow[] | null) ?? [];
+  if (models.length === 0) return [];
+
+  const providerIds = Array.from(new Set(models.map((model) => model.provider_id)));
+  const [{ data: providerRows }, { data: keyRows }] = await Promise.all([
+    admin.from("ai_providers").select("*").in("id", providerIds).eq("is_active", true),
+    admin
+      .from("ai_api_keys")
+      .select("*")
+      .in("provider_id", providerIds)
+      .in("status", ["active", "rate_limited"])
+      .order("priority", { ascending: true }),
+  ]);
+
+  const providerById = new Map(
+    ((providerRows as AiProviderRow[] | null) ?? []).map((provider) => [
+      provider.id,
+      provider,
+    ]),
+  );
+  const keysByProvider = new Map<string, AiApiKeyRow[]>();
+  for (const key of (keyRows as AiApiKeyRow[] | null) ?? []) {
+    const bucket = keysByProvider.get(key.provider_id) ?? [];
+    bucket.push(key);
+    keysByProvider.set(key.provider_id, bucket);
+  }
+
+  const modelById = new Map(models.map((model) => [model.id, model]));
+  const routed: GatewayCandidate[] = [];
+
+  for (const route of routes.sort((a, b) => a.priority - b.priority)) {
+    const model = modelById.get(route.model_id);
+    if (!model) continue;
+    const provider = providerById.get(model.provider_id);
+    if (!provider) continue;
+
+    const keys = [...(keysByProvider.get(provider.id) ?? [])].sort((a, b) => {
+      const rank = (status: string) => (status === "active" ? 0 : 1);
+      return rank(a.status) - rank(b.status) || a.priority - b.priority;
+    });
+
+    for (const key of keys) {
+      routed.push({
+        keyId: key.id,
+        providerId: provider.id,
+        providerName: provider.name,
+        baseUrl: provider.base_url,
+        model: model.model_key,
+        priority: route.priority,
+        isLocalFallback: false,
+        secretId: key.vault_secret_id,
+      });
+      if (routed.length >= MAX_CANDIDATES) return routed;
+    }
+  }
+
+  return routed;
 }
 
 async function resolveApiKey(candidate: GatewayCandidate): Promise<string> {
@@ -271,6 +367,16 @@ function normaliseBaseUrl(baseUrl: string): string {
   return `${trimmed}/v1/chat/completions`;
 }
 
+function normaliseModelsUrl(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, "");
+  if (trimmed.endsWith("/models")) return trimmed;
+  if (trimmed.endsWith("/chat/completions")) {
+    return trimmed.replace(/\/chat\/completions$/, "/models");
+  }
+  if (/\/v\d+$/.test(trimmed)) return `${trimmed}/models`;
+  return `${trimmed}/v1/models`;
+}
+
 async function callOnce(
   candidate: GatewayCandidate,
   apiKey: string,
@@ -366,7 +472,7 @@ export async function runGateway(
   request: GatewayRequest,
   options: { candidates?: GatewayCandidate[] } = {},
 ): Promise<GatewayResult> {
-  const candidates = options.candidates ?? (await resolveCandidates());
+  const candidates = options.candidates ?? (await resolveCandidates(request.task));
 
   if (candidates.length === 0) {
     return {
@@ -517,7 +623,7 @@ export async function runStructuredGateway<T>(
   request: GatewayRequest,
   schema: z.ZodType<T>,
 ): Promise<StructuredResult<T>> {
-  const candidates = await resolveCandidates();
+  const candidates = await resolveCandidates(request.task);
   const first = await runGateway(
     { ...request, responseFormatJson: true },
     { candidates },
@@ -686,4 +792,81 @@ export async function testCandidate(candidate: GatewayCandidate): Promise<{
     latencyMs: result.latencyMs,
     model: candidate.model,
   };
+}
+
+interface ModelListResponse {
+  data?: Array<{ id?: string; object?: string }>;
+}
+
+export async function detectCandidateModels(
+  candidate: GatewayCandidate,
+): Promise<
+  | { ok: true; models: string[]; latencyMs: number }
+  | { ok: false; message: string; latencyMs: number }
+> {
+  let apiKey: string;
+  try {
+    apiKey = await resolveApiKey(candidate);
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof SecretStoreError
+          ? error.message
+          : "Gagal membaca API key dari secret store.",
+      latencyMs: 0,
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const startedAt = Date.now();
+
+  try {
+    const response = await fetch(normaliseModelsUrl(candidate.baseUrl), {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      cache: "no-store",
+    });
+    const latencyMs = Date.now() - startedAt;
+
+    if (!response.ok) {
+      void response.body?.cancel();
+      return {
+        ok: false,
+        message: classifyHttpFailure(response.status).message,
+        latencyMs,
+      };
+    }
+
+    const payload = (await response.json()) as ModelListResponse;
+    const models = Array.from(
+      new Set(
+        (payload.data ?? [])
+          .map((model) => model.id?.trim())
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+
+    if (models.length === 0) {
+      return {
+        ok: false,
+        message: "Provider tidak mengembalikan daftar model.",
+        latencyMs,
+      };
+    }
+
+    return { ok: true, models, latencyMs };
+  } catch (error) {
+    return {
+      ok: false,
+      message: classifyNetworkFailure(error).message,
+      latencyMs: Date.now() - startedAt,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }

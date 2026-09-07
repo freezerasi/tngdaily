@@ -4,7 +4,9 @@ import { isSupabaseAdminConfigured, isSupabaseConfigured } from "@/lib/env";
 import { getAdminSupabase, getServerSupabase } from "@/lib/supabase/server";
 import type {
   AiApiKeyView,
+  AiModelView,
   AiProviderView,
+  AiTaskModelSettingView,
   AiUsageLogView,
   AiUsageStats,
   DataResult,
@@ -14,7 +16,9 @@ import type {
 import type {
   AiApiKeyRow,
   AiGenerationJobRow,
+  AiModelRow,
   AiProviderRow,
+  AiTaskModelRow,
   AiUsageLogRow,
   RewriteJobRow,
 } from "@/types/database";
@@ -38,6 +42,23 @@ function mapKey(row: AiApiKeyRow): AiApiKeyView {
     status: row.status,
     lastUsedAt: row.last_used_at,
     lastError: row.last_error,
+  };
+}
+
+function mapModel(
+  row: AiModelRow,
+  providerName: string,
+): AiModelView {
+  return {
+    id: row.id,
+    providerId: row.provider_id,
+    providerName,
+    modelKey: row.model_key,
+    displayName: row.display_name,
+    isEnabled: row.is_enabled,
+    source: row.source,
+    lastSeenAt: row.last_seen_at,
+    createdAt: row.created_at,
   };
 }
 
@@ -70,19 +91,114 @@ export async function listProvidersWithKeys(): Promise<
           .order("priority", { ascending: true })
       ).data as AiApiKeyRow[] | null) ?? [])
     : [];
+  const models: AiModelRow[] = admin
+    ? (((
+        await admin
+          .from("ai_models")
+          .select("*")
+          .in(
+            "provider_id",
+            providers.map((provider) => provider.id),
+          )
+          .order("model_key", { ascending: true })
+      ).data as AiModelRow[] | null) ?? [])
+    : [];
 
   return {
-    data: providers.map((provider) => ({
-      id: provider.id,
-      name: provider.name,
-      baseUrl: provider.base_url,
-      defaultModel: provider.default_model,
-      isActive: provider.is_active,
-      notes: provider.notes,
-      createdAt: provider.created_at,
-      keys: keys
-        .filter((key) => key.provider_id === provider.id)
-        .map(mapKey),
+    data: providers.map((provider) => {
+      const providerModels = models
+        .filter((model) => model.provider_id === provider.id)
+        .map((model) => mapModel(model, provider.name));
+
+      return {
+        id: provider.id,
+        name: provider.name,
+        baseUrl: provider.base_url,
+        defaultModel: provider.default_model,
+        isActive: provider.is_active,
+        notes: provider.notes,
+        createdAt: provider.created_at,
+        keys: keys
+          .filter((key) => key.provider_id === provider.id)
+          .map(mapKey),
+        models: providerModels,
+      };
+    }),
+    source: "supabase",
+  };
+}
+
+export async function listTaskModelSettings(): Promise<
+  DataResult<AiTaskModelSettingView[]>
+> {
+  if (!isSupabaseConfigured()) return { data: [], source: "unconfigured" };
+
+  const admin = getAdminSupabase();
+  if (!admin) return { data: [], source: "supabase" };
+
+  const { data: routeRows, error } = await admin
+    .from("ai_task_models")
+    .select("*")
+    .eq("is_enabled", true)
+    .order("task_type", { ascending: true })
+    .order("priority", { ascending: true });
+
+  if (error) return { data: [], source: "supabase", error: error.message };
+
+  const routes = (routeRows as AiTaskModelRow[] | null) ?? [];
+  if (routes.length === 0) return { data: [], source: "supabase" };
+
+  const modelIds = Array.from(new Set(routes.map((route) => route.model_id)));
+  const { data: modelRows, error: modelError } = await admin
+    .from("ai_models")
+    .select("*")
+    .in("id", modelIds);
+
+  if (modelError) {
+    return { data: [], source: "supabase", error: modelError.message };
+  }
+
+  const models = (modelRows as AiModelRow[] | null) ?? [];
+  const providerIds = Array.from(new Set(models.map((model) => model.provider_id)));
+  const { data: providerRows, error: providerError } = await admin
+    .from("ai_providers")
+    .select("id, name")
+    .in("id", providerIds);
+
+  if (providerError) {
+    return { data: [], source: "supabase", error: providerError.message };
+  }
+
+  const modelById = new Map(models.map((model) => [model.id, model]));
+  const providerNameById = new Map(
+    ((providerRows as Array<{ id: string; name: string }> | null) ?? []).map(
+      (provider) => [provider.id, provider.name],
+    ),
+  );
+  const grouped = new Map<AiTaskType, AiTaskModelSettingView["models"]>();
+
+  for (const route of routes) {
+    const model = modelById.get(route.model_id);
+    if (!model) continue;
+    const providerName = providerNameById.get(model.provider_id) ?? "Provider";
+    const bucket = grouped.get(route.task_type) ?? [];
+    bucket.push({
+      id: route.id,
+      taskType: route.task_type,
+      modelId: model.id,
+      modelKey: model.model_key,
+      providerId: model.provider_id,
+      providerName,
+      priority: route.priority,
+      isEnabled: route.is_enabled,
+    });
+    grouped.set(route.task_type, bucket);
+  }
+
+  return {
+    data: Array.from(grouped.entries()).map(([taskType, settingModels]) => ({
+      taskType,
+      models: settingModels.sort((a, b) => a.priority - b.priority),
     })),
     source: "supabase",
   };

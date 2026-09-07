@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
+  Bot,
   KeyRound,
+  ListChecks,
   Loader2,
   Plug,
   Plus,
   Power,
+  RefreshCw,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
@@ -46,14 +49,23 @@ import {
   createProviderAction,
   deleteApiKeyAction,
   deleteProviderAction,
+  detectProviderModelsAction,
   reorderKeysAction,
   setKeyStatusAction,
+  saveTaskModelSettingsAction,
+  setModelStatusAction,
   testApiKeyAction,
   toggleProviderAction,
 } from "@/app/(admin)/admin/(dashboard)/ai/actions";
 import { formatFeedTime } from "@/lib/dates";
-import type { AiApiKeyView, AiProviderView, DataSource } from "@/lib/data/types";
-import type { AiKeyStatus } from "@/types/domain";
+import type {
+  AiApiKeyView,
+  AiModelView,
+  AiProviderView,
+  AiTaskModelSettingView,
+  DataSource,
+} from "@/lib/data/types";
+import type { AiKeyStatus, AiTaskType } from "@/types/domain";
 
 /**
  * Provider and key manager.
@@ -64,10 +76,12 @@ import type { AiKeyStatus } from "@/types/domain";
  */
 export function AiProviderManager({
   providers,
+  taskModelSettings,
   source,
   canWrite,
 }: {
   providers: AiProviderView[];
+  taskModelSettings: AiTaskModelSettingView[];
   source: DataSource;
   canWrite: boolean;
 }) {
@@ -78,6 +92,18 @@ export function AiProviderManager({
           provider.keys.map((key) => ({ key, providerName: provider.name })),
         )
         .sort((a, b) => a.key.priority - b.key.priority),
+    [providers],
+  );
+  const enabledModels = React.useMemo(
+    () =>
+      providers
+        .flatMap((provider) => provider.models)
+        .filter((model) => model.isEnabled)
+        .sort((a, b) =>
+          `${a.providerName}:${a.modelKey}`.localeCompare(
+            `${b.providerName}:${b.modelKey}`,
+          ),
+        ),
     [providers],
   );
 
@@ -122,6 +148,12 @@ export function AiProviderManager({
           canWrite={canWrite}
         />
       ) : null}
+
+      <TaskModelSettings
+        availableModels={enabledModels}
+        settings={taskModelSettings}
+        canWrite={canWrite}
+      />
     </section>
   );
 }
@@ -135,6 +167,7 @@ function ProviderCard({
 }) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
+  const [detecting, setDetecting] = React.useState(false);
 
   const toggle = async (isActive: boolean) => {
     setPending(true);
@@ -145,6 +178,18 @@ function ProviderCard({
       router.refresh();
     } else {
       toast.error(result.message ?? "Gagal mengubah status.");
+    }
+  };
+
+  const detectModels = async () => {
+    setDetecting(true);
+    const result = await detectProviderModelsAction(provider.id);
+    setDetecting(false);
+    if (result.ok) {
+      toast.success(result.message ?? "Model terdeteksi.");
+      router.refresh();
+    } else {
+      toast.error(result.message ?? "Deteksi model gagal.");
     }
   };
 
@@ -168,7 +213,7 @@ function ProviderCard({
             {provider.baseUrl}
           </p>
           <p className="mt-0.5 text-[0.75rem] text-muted">
-            Model default: {provider.defaultModel}
+            Model default: {provider.defaultModel ?? "Belum dipilih"}
           </p>
           {provider.notes ? (
             <p className="mt-1.5 text-[0.8125rem] text-muted">{provider.notes}</p>
@@ -186,6 +231,40 @@ function ProviderCard({
             />
           </label>
         </div>
+      </div>
+
+      <div className="grid gap-2 border-t-2 border-line pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="tng-label text-muted">Model AI</h4>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!canWrite || detecting || provider.keys.length === 0}
+            onClick={() => void detectModels()}
+          >
+            {detecting ? (
+              <Loader2 aria-hidden="true" className="animate-spin" />
+            ) : (
+              <RefreshCw aria-hidden="true" />
+            )}
+            Deteksi model
+          </Button>
+        </div>
+
+        {provider.models.length === 0 ? (
+          <p className="text-[0.8125rem] text-muted">
+            Belum ada model terdeteksi. Tambahkan key, lalu jalankan deteksi
+            model dari provider ini.
+          </p>
+        ) : (
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {provider.models.map((model) => (
+              <li key={model.id}>
+                <ModelRow model={model} canWrite={canWrite} />
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="grid gap-2 border-t-2 border-line pt-3">
@@ -232,6 +311,263 @@ function ProviderCard({
         />
       </div>
     </BannerPanel>
+  );
+}
+
+function ModelRow({
+  model,
+  canWrite,
+}: {
+  model: AiModelView;
+  canWrite: boolean;
+}) {
+  const router = useRouter();
+  const [pending, setPending] = React.useState(false);
+
+  const setEnabled = async (isEnabled: boolean) => {
+    setPending(true);
+    const result = await setModelStatusAction({
+      modelId: model.id,
+      isEnabled,
+    });
+    setPending(false);
+    if (result.ok) {
+      toast.success(result.message ?? "Status model disimpan.");
+      router.refresh();
+    } else {
+      toast.error(result.message ?? "Status model gagal disimpan.");
+    }
+  };
+
+  return (
+    <div className="flex min-h-16 items-center gap-2 border-2 border-line bg-wall-deep p-2.5">
+      <Bot aria-hidden="true" className="size-4 shrink-0 text-muted" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-mono text-[0.8125rem] text-foreground">
+          {model.displayName ?? model.modelKey}
+        </span>
+        <span className="block truncate text-[0.75rem] text-muted">
+          {model.source === "detected" ? "Terdeteksi" : "Manual"}
+          {model.lastSeenAt ? ` - ${formatFeedTime(model.lastSeenAt)}` : ""}
+        </span>
+      </span>
+      <Switch
+        checked={model.isEnabled}
+        disabled={!canWrite || pending}
+        onCheckedChange={(next) => void setEnabled(next)}
+        aria-label={`${model.isEnabled ? "Nonaktifkan" : "Aktifkan"} model ${model.modelKey}`}
+      />
+    </div>
+  );
+}
+
+const TASK_OPTIONS: Array<{ taskType: AiTaskType; label: string }> = [
+  { taskType: "ideation", label: "Ideasi artikel" },
+  { taskType: "headline", label: "Judul/headline" },
+  { taskType: "outline", label: "Outline artikel" },
+  { taskType: "draft", label: "Draft artikel" },
+  { taskType: "rewrite", label: "Rewrite artikel" },
+  { taskType: "seo", label: "SEO metadata" },
+  { taskType: "image", label: "Prompt gambar" },
+  { taskType: "quality", label: "Quality gate" },
+  { taskType: "social", label: "Social package" },
+  { taskType: "copilot", label: "Copilot editor" },
+];
+
+function TaskModelSettings({
+  availableModels,
+  settings,
+  canWrite,
+}: {
+  availableModels: AiModelView[];
+  settings: AiTaskModelSettingView[];
+  canWrite: boolean;
+}) {
+  return (
+    <BannerPanel ink="wall" lift="sm" className="grid gap-3 p-3 sm:p-4">
+      <div>
+        <h2 className="tng-display text-xl">Model per tugas</h2>
+        <p className="tng-measure mt-1 text-[0.8125rem] leading-relaxed text-muted">
+          Urutan pertama menjadi model utama untuk task tersebut. Urutan
+          berikutnya dipakai sebagai fallback saat provider/key error atau
+          terkena limit.
+        </p>
+      </div>
+
+      {availableModels.length === 0 ? (
+        <p className="text-[0.8125rem] text-muted">
+          Belum ada model aktif. Deteksi model dari provider, lalu aktifkan model
+          yang ingin dipakai.
+        </p>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {TASK_OPTIONS.map((task) => {
+            const setting = settings.find(
+              (entry) => entry.taskType === task.taskType,
+            );
+            return (
+              <TaskModelRow
+                key={task.taskType}
+                taskType={task.taskType}
+                label={task.label}
+                availableModels={availableModels}
+                selectedModelIds={
+                  setting?.models.map((model) => model.modelId) ?? []
+                }
+                canWrite={canWrite}
+              />
+            );
+          })}
+        </div>
+      )}
+    </BannerPanel>
+  );
+}
+
+function TaskModelRow({
+  taskType,
+  label,
+  availableModels,
+  selectedModelIds,
+  canWrite,
+}: {
+  taskType: AiTaskType;
+  label: string;
+  availableModels: AiModelView[];
+  selectedModelIds: string[];
+  canWrite: boolean;
+}) {
+  const router = useRouter();
+  const [order, setOrder] = React.useState(
+    selectedModelIds.filter((id) =>
+      availableModels.some((model) => model.id === id),
+    ),
+  );
+  const [pending, setPending] = React.useState(false);
+  const initial = selectedModelIds.join(",");
+  const changed = order.join(",") !== initial;
+
+  const selected = order
+    .map((id) => availableModels.find((model) => model.id === id))
+    .filter((model): model is AiModelView => Boolean(model));
+
+  const toggle = (modelId: string, checked: boolean) => {
+    setOrder((prev) => {
+      if (checked) {
+        if (prev.includes(modelId)) return prev;
+        return [...prev, modelId];
+      }
+      return prev.filter((id) => id !== modelId);
+    });
+  };
+
+  const move = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= order.length) return;
+    setOrder((prev) => {
+      const next = [...prev];
+      const current = next[index];
+      const swapped = next[target];
+      if (!current || !swapped) return prev;
+      next[index] = swapped;
+      next[target] = current;
+      return next;
+    });
+  };
+
+  const save = async () => {
+    setPending(true);
+    const result = await saveTaskModelSettingsAction({
+      taskType,
+      modelIds: order,
+    });
+    setPending(false);
+    if (result.ok) {
+      toast.success(result.message ?? "Pengaturan disimpan.");
+      router.refresh();
+    } else {
+      toast.error(result.message ?? "Pengaturan gagal disimpan.");
+    }
+  };
+
+  return (
+    <div className="grid gap-2 border-2 border-line bg-wall-deep p-2.5">
+      <div className="flex items-center gap-2">
+        <ListChecks aria-hidden="true" className="size-4 text-muted" />
+        <h3 className="font-display text-[0.9375rem] font-extrabold text-foreground">
+          {label}
+        </h3>
+      </div>
+
+      <div className="grid gap-1.5">
+        {availableModels.map((model) => (
+          <label
+            key={model.id}
+            className="flex min-h-8 items-center gap-2 text-[0.8125rem] text-muted"
+          >
+            <input
+              type="checkbox"
+              checked={order.includes(model.id)}
+              disabled={!canWrite || pending}
+              onChange={(event) => toggle(model.id, event.target.checked)}
+              className="size-4 accent-lime"
+            />
+            <span className="min-w-0 flex-1 truncate">
+              {model.providerName} - {model.modelKey}
+            </span>
+          </label>
+        ))}
+      </div>
+
+      {selected.length > 0 ? (
+        <ol className="grid gap-1.5 border-t-2 border-line pt-2">
+          {selected.map((model, index) => (
+            <li key={model.id} className="flex items-center gap-2">
+              <span className="font-display text-[0.75rem] font-extrabold tabular-nums text-lime">
+                {index + 1}
+              </span>
+              <span className="min-w-0 flex-1 truncate font-mono text-[0.75rem] text-foreground">
+                {model.providerName} - {model.modelKey}
+              </span>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label={`Naikkan ${model.modelKey}`}
+                disabled={!canWrite || pending || index === 0}
+                onClick={() => move(index, -1)}
+              >
+                <ArrowUp aria-hidden="true" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label={`Turunkan ${model.modelKey}`}
+                disabled={!canWrite || pending || index === selected.length - 1}
+                onClick={() => move(index, 1)}
+              >
+                <ArrowDown aria-hidden="true" />
+              </Button>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="border-t-2 border-line pt-2 text-[0.75rem] text-muted">
+          Jika kosong, gateway memakai fallback default provider yang lama.
+        </p>
+      )}
+
+      {changed ? (
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!canWrite || pending}
+          onClick={() => void save()}
+        >
+          {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+          Simpan
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -581,8 +917,8 @@ function ProviderDialog({ disabled }: { disabled: boolean }) {
             <Field
               label="Model default"
               htmlFor="provider-model"
-              required
               error={errors.defaultModel}
+              hint="Opsional. Bisa diisi setelah deteksi model berjalan."
             >
               <Input
                 id="provider-model"

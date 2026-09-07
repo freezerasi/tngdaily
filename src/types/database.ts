@@ -147,9 +147,32 @@ export interface AiProviderRow {
   id: string;
   name: string;
   base_url: string;
-  default_model: string;
+  default_model: string | null;
   is_active: boolean;
   notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiModelRow {
+  id: string;
+  provider_id: string;
+  model_key: string;
+  display_name: string | null;
+  is_enabled: boolean;
+  source: "detected" | "manual";
+  last_seen_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiTaskModelRow {
+  id: string;
+  task_type: AiTaskType;
+  model_id: string;
+  priority: number;
+  is_enabled: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
