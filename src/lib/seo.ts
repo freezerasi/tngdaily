@@ -1,20 +1,32 @@
 import type { Metadata } from "next";
 
-import { siteUrl } from "@/lib/env";
 import { isEvidentiary, isIndexable } from "@/lib/content-environment";
 import type { ArticleDetail, ArticleSummary } from "@/lib/data/types";
-import { PILLAR_META, type Pillar } from "@/types/domain";
+import { siteUrl } from "@/lib/env";
 import { truncate } from "@/lib/utils";
+import { PILLARS, PILLAR_META, type Pillar } from "@/types/domain";
 
 export const SITE_NAME = "TNG Daily";
 export const SITE_TAGLINE = "Media anak muda Tangerang Raya";
 export const SITE_DESCRIPTION =
   "Kuliner, isu kota, loker, dan cerita warga Tangerang Raya. Ditulis untuk yang tinggal di sini, bukan untuk mesin pencari.";
 
+const SITE_LOCALE = "id_ID";
+const SITE_LANGUAGE = "id-ID";
+
 export function absoluteUrl(path = "/"): string {
   const clean = path.startsWith("/") ? path : `/${path}`;
   return `${siteUrl}${clean}`;
 }
+
+const ORGANIZATION_ID = absoluteUrl("/#organization");
+const WEBSITE_ID = absoluteUrl("/#website");
+
+const LOCAL_AREAS = [
+  { "@type": "City", name: "Kota Tangerang" },
+  { "@type": "City", name: "Tangerang Selatan" },
+  { "@type": "AdministrativeArea", name: "Kabupaten Tangerang" },
+] as const;
 
 export function articleUrl(slug: string): string {
   return absoluteUrl(`/artikel/${slug}`);
@@ -24,24 +36,32 @@ export function defaultMetadata(): Metadata {
   return {
     metadataBase: new URL(siteUrl),
     title: {
-      default: `${SITE_NAME} — ${SITE_TAGLINE}`,
+      default: `${SITE_NAME} - ${SITE_TAGLINE}`,
       template: `%s | ${SITE_NAME}`,
     },
     description: SITE_DESCRIPTION,
     applicationName: SITE_NAME,
+    creator: SITE_NAME,
+    publisher: SITE_NAME,
     referrer: "strict-origin-when-cross-origin",
+    category: "news",
+    formatDetection: {
+      email: false,
+      address: false,
+      telephone: false,
+    },
     alternates: { canonical: "/" },
     openGraph: {
       type: "website",
       siteName: SITE_NAME,
-      locale: "id_ID",
+      locale: SITE_LOCALE,
       url: siteUrl,
-      title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+      title: `${SITE_NAME} - ${SITE_TAGLINE}`,
       description: SITE_DESCRIPTION,
     },
     twitter: {
       card: "summary_large_image",
-      title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+      title: `${SITE_NAME} - ${SITE_TAGLINE}`,
       description: SITE_DESCRIPTION,
     },
     robots: {
@@ -67,6 +87,8 @@ export function pillarMetadata(pillar: Pillar): Metadata {
       title,
       description: meta.description,
       url: absoluteUrl(`/${pillar}`),
+      siteName: SITE_NAME,
+      locale: SITE_LOCALE,
       images: [{ url: absoluteUrl(`/${pillar}/opengraph-image`) }],
     },
     twitter: { card: "summary_large_image", title, description: meta.description },
@@ -112,7 +134,11 @@ export function articleMetadata(article: ArticleDetail): Metadata {
     title,
     description: truncate(description, 200),
     alternates: { canonical },
-    keywords: article.tags.length > 0 ? article.tags : undefined,
+    keywords: [
+      article.primaryKeyword,
+      ...article.secondaryKeywords,
+      ...article.tags,
+    ].filter(Boolean) as string[],
     authors: article.authorName ? [{ name: article.authorName }] : undefined,
     openGraph: {
       type: "article",
@@ -120,7 +146,7 @@ export function articleMetadata(article: ArticleDetail): Metadata {
       description: truncate(description, 200),
       url: absoluteUrl(canonical),
       siteName: SITE_NAME,
-      locale: "id_ID",
+      locale: SITE_LOCALE,
       publishedTime: article.publishedAt ?? undefined,
       modifiedTime: article.updatedAt,
       authors: article.authorName ? [article.authorName] : undefined,
@@ -149,11 +175,7 @@ export function articleMetadata(article: ArticleDetail): Metadata {
  *
  * Returns null for mock content: a structured-data graph is a machine-readable
  * assertion that this article exists as reporting, and a development fixture
- * must never make that assertion. The caller renders nothing when null.
- *
- * `image` is only emitted when the cover actually documents something. Google
- * treats a NewsArticle image as depicting the story, and there is no field in
- * which to disclose that a frame is an illustration.
+ * must never make that assertion.
  */
 export function newsArticleJsonLd(
   article: ArticleDetail,
@@ -169,28 +191,25 @@ export function newsArticleJsonLd(
   return {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
+    "@id": `${url}#article`,
     headline: truncate(article.title, 110),
     description: article.metaDescription ?? article.dek ?? article.excerpt ?? undefined,
     image: coverIsEvidentiary ? [article.coverImageUrl as string] : undefined,
     datePublished: article.publishedAt ?? article.createdAt,
     dateModified: article.updatedAt,
+    wordCount: estimateWordCount(article.contentMarkdown),
     articleSection: PILLAR_META[article.pillar].label,
     keywords: article.tags.length > 0 ? article.tags.join(", ") : undefined,
-    inLanguage: "id-ID",
+    inLanguage: SITE_LANGUAGE,
+    isPartOf: { "@id": WEBSITE_ID },
+    about: article.tags.slice(0, 8).map((tag) => ({ "@type": "Thing", name: tag })),
+    contentLocation: LOCAL_AREAS,
     author: {
       "@type": article.authorName ? "Person" : "Organization",
       name: article.authorName ?? SITE_NAME,
     },
-    publisher: {
-      "@type": "Organization",
-      name: SITE_NAME,
-      url: siteUrl,
-      logo: {
-        "@type": "ImageObject",
-        url: absoluteUrl("/icon.svg"),
-      },
-    },
-    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+    publisher: publisherJsonLd(),
+    mainEntityOfPage: { "@type": "WebPage", "@id": `${url}#webpage` },
     url,
     isAccessibleForFree: true,
   };
@@ -202,39 +221,233 @@ export function breadcrumbJsonLd(
   if (!isIndexable(article)) return null;
 
   const meta = PILLAR_META[article.pillar];
-  return {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: SITE_NAME, item: siteUrl },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: meta.label,
-        item: absoluteUrl(`/${article.pillar}`),
-      },
-      {
-        "@type": "ListItem",
-        position: 3,
-        name: article.title,
-        item: articleUrl(article.slug),
-      },
-    ],
-  };
+  return pageBreadcrumbJsonLd([
+    { name: SITE_NAME, path: "/" },
+    { name: meta.label, path: `/${article.pillar}` },
+    { name: article.title, path: `/artikel/${article.slug}` },
+  ]);
 }
 
 export function organizationJsonLd(): Record<string, unknown> {
   return {
     "@context": "https://schema.org",
     "@type": "NewsMediaOrganization",
+    "@id": ORGANIZATION_ID,
     name: SITE_NAME,
     url: siteUrl,
     description: SITE_DESCRIPTION,
-    areaServed: [
-      { "@type": "City", name: "Kota Tangerang" },
-      { "@type": "City", name: "Tangerang Selatan" },
-      { "@type": "AdministrativeArea", name: "Kabupaten Tangerang" },
-    ],
-    logo: { "@type": "ImageObject", url: absoluteUrl("/icon.svg") },
+    areaServed: LOCAL_AREAS,
+    logo: logoJsonLd(),
   };
+}
+
+export function websiteJsonLd(): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": WEBSITE_ID,
+    name: SITE_NAME,
+    alternateName: SITE_TAGLINE,
+    url: siteUrl,
+    description: SITE_DESCRIPTION,
+    inLanguage: SITE_LANGUAGE,
+    publisher: { "@id": ORGANIZATION_ID },
+  };
+}
+
+export function homePageJsonLd(
+  articles: readonly ArticleSummary[] = [],
+): Record<string, unknown> {
+  return collectionPageJsonLd({
+    path: "/",
+    title: `${SITE_NAME} - ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+    items: articles,
+    pageType: "WebPage",
+  });
+}
+
+export function pillarPageJsonLd({
+  pillar,
+  articles = [],
+}: {
+  pillar: Pillar;
+  articles?: readonly ArticleSummary[];
+  tag?: string;
+}): Record<string, unknown> {
+  const meta = PILLAR_META[pillar];
+  const path = `/${pillar}`;
+  const title = `${meta.wordmark}: ${meta.tagline}`;
+
+  return jsonLdGraph([
+    collectionPageJsonLd({
+      path,
+      title,
+      description: meta.description,
+      items: articles,
+      pageType: "CollectionPage",
+    }),
+    stripContext(
+      pageBreadcrumbJsonLd([
+        { name: SITE_NAME, path: "/" },
+        { name: meta.label, path: `/${pillar}` },
+      ]),
+    ),
+  ]);
+}
+
+export function staticPageJsonLd({
+  path,
+  title,
+  description,
+  breadcrumbName = title,
+}: {
+  path: string;
+  title: string;
+  description: string;
+  breadcrumbName?: string;
+}): Record<string, unknown> {
+  return jsonLdGraph([
+    {
+      "@type": "WebPage",
+      "@id": `${absoluteUrl(path)}#webpage`,
+      url: absoluteUrl(path),
+      name: title,
+      description,
+      inLanguage: SITE_LANGUAGE,
+      isPartOf: { "@id": WEBSITE_ID },
+      publisher: { "@id": ORGANIZATION_ID },
+    },
+    stripContext(
+      pageBreadcrumbJsonLd([
+        { name: SITE_NAME, path: "/" },
+        { name: breadcrumbName, path },
+      ]),
+    ),
+  ]);
+}
+
+export function articleJsonLdGraph(
+  article: ArticleDetail,
+): Record<string, unknown> | null {
+  const newsArticle = newsArticleJsonLd(article);
+  const breadcrumb = breadcrumbJsonLd(article);
+  if (!newsArticle || !breadcrumb) return null;
+
+  const url = articleUrl(article.slug);
+  return jsonLdGraph([
+    {
+      "@type": "WebPage",
+      "@id": `${url}#webpage`,
+      url,
+      name: article.seoTitle ?? article.title,
+      description:
+        article.metaDescription ?? article.dek ?? article.excerpt ?? undefined,
+      inLanguage: SITE_LANGUAGE,
+      isPartOf: { "@id": WEBSITE_ID },
+      breadcrumb: { "@id": `${url}#breadcrumb` },
+      primaryImageOfPage: article.coverImageUrl
+        ? { "@type": "ImageObject", url: article.coverImageUrl }
+        : undefined,
+      mainEntity: { "@id": `${url}#article` },
+    },
+    { ...stripContext(breadcrumb), "@id": `${url}#breadcrumb` },
+    stripContext(newsArticle),
+  ]);
+}
+
+export function pageBreadcrumbJsonLd(
+  items: readonly { name: string; path: string }[],
+): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      item: absoluteUrl(item.path),
+    })),
+  };
+}
+
+function collectionPageJsonLd({
+  path,
+  title,
+  description,
+  items,
+  pageType,
+}: {
+  path: string;
+  title: string;
+  description: string;
+  items: readonly ArticleSummary[];
+  pageType: "WebPage" | "CollectionPage";
+}): Record<string, unknown> {
+  const url = absoluteUrl(path);
+  const listItems = items.filter(isIndexable).slice(0, 10).map((article, index) => ({
+    "@type": "ListItem",
+    position: index + 1,
+    url: articleUrl(article.slug),
+    name: article.title,
+  }));
+
+  return {
+    "@context": "https://schema.org",
+    "@type": pageType,
+    "@id": `${url}#webpage`,
+    url,
+    name: title,
+    description,
+    inLanguage: SITE_LANGUAGE,
+    isPartOf: { "@id": WEBSITE_ID },
+    publisher: { "@id": ORGANIZATION_ID },
+    about: PILLARS.map((pillar) => ({
+      "@type": "Thing",
+      name: PILLAR_META[pillar].label,
+    })),
+    mainEntity:
+      listItems.length > 0
+        ? {
+            "@type": "ItemList",
+            numberOfItems: listItems.length,
+            itemListElement: listItems,
+          }
+        : undefined,
+  };
+}
+
+function jsonLdGraph(graph: readonly Record<string, unknown>[]): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@graph": graph.map(stripContext),
+  };
+}
+
+function stripContext(entry: Record<string, unknown>): Record<string, unknown> {
+  const { "@context": _context, ...rest } = entry;
+  return rest;
+}
+
+function publisherJsonLd(): Record<string, unknown> {
+  return {
+    "@type": "NewsMediaOrganization",
+    "@id": ORGANIZATION_ID,
+    name: SITE_NAME,
+    url: siteUrl,
+    logo: logoJsonLd(),
+  };
+}
+
+function logoJsonLd(): Record<string, unknown> {
+  return {
+    "@type": "ImageObject",
+    url: absoluteUrl("/icon.svg"),
+    width: 512,
+    height: 512,
+  };
+}
+
+function estimateWordCount(markdown: string): number {
+  return markdown.trim().split(/\s+/).filter(Boolean).length;
 }

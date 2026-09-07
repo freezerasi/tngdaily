@@ -883,9 +883,53 @@ export function ContentStudio({ sessionKey }: { sessionKey: string }) {
                     label="Keyword utama"
                     value={finish.seo.primary_keyword}
                   />
+                  <MetaRow
+                    label="Keyword sekunder"
+                    value={finish.seo.secondary_keywords.join(", ")}
+                  />
+                  <MetaRow
+                    label="Entitas GEO"
+                    value={finish.seo.entity_keywords.join(", ")}
+                  />
                   <MetaRow label="Tag" value={finish.seo.tags.join(", ")} />
                   <MetaRow label="Alt text" value={finish.seo.image_alt_text} />
                 </dl>
+                {finish.seo.internal_link_suggestions.length > 0 ? (
+                  <SeoSuggestionList
+                    title="Internal link"
+                    items={finish.seo.internal_link_suggestions.map((item) => ({
+                      key: `${item.anchor_text}-${item.target_topic_or_slug}`,
+                      body: `${item.anchor_text} -> ${item.target_topic_or_slug}: ${item.reason}`,
+                    }))}
+                  />
+                ) : null}
+                {finish.seo.geo_answer_targets.length > 0 ? (
+                  <SeoSuggestionList
+                    title="Target jawaban GEO"
+                    items={finish.seo.geo_answer_targets.map((item) => ({
+                      key: item.question,
+                      body: `${item.question} ${item.answer_summary}`,
+                    }))}
+                  />
+                ) : null}
+                {finish.seo.faq_candidates.length > 0 ? (
+                  <SeoSuggestionList
+                    title="FAQ kandidat"
+                    items={finish.seo.faq_candidates.map((item) => ({
+                      key: item.question,
+                      body: `${item.question} ${item.short_answer}`,
+                    }))}
+                  />
+                ) : null}
+                {finish.seo.content_refresh_notes.length > 0 ? (
+                  <SeoSuggestionList
+                    title="Refresh konten"
+                    items={finish.seo.content_refresh_notes.map((note) => ({
+                      key: note,
+                      body: note,
+                    }))}
+                  />
+                ) : null}
                 {finish.seo.seo_warnings.length > 0 ? (
                   <ul className="mt-1 grid gap-1">
                     {finish.seo.seo_warnings.map((warning) => (
@@ -1059,6 +1103,26 @@ function MetaRow({ label, value }: { label: string; value: string }) {
     <div className="grid gap-0.5 border-l-2 border-line pl-2">
       <dt className="tng-label text-[0.5625rem] text-muted">{label}</dt>
       <dd className="text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+function SeoSuggestionList({
+  title,
+  items,
+}: {
+  title: string;
+  items: Array<{ key: string; body: string }>;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="grid gap-1 border-l-2 border-line pl-2.5">
+      <h4 className="tng-label text-[0.5625rem] text-muted">{title}</h4>
+      <ul className="grid gap-1 text-[0.75rem] leading-snug text-muted">
+        {items.map((item) => (
+          <li key={item.key}>{item.body}</li>
+        ))}
+      </ul>
     </div>
   );
 }

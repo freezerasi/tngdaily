@@ -288,13 +288,20 @@ const SEO: FallbackTemplate = {
   name: "AI SEO Editor: Metadata dan Schema",
   systemPrompt: `TUGAS KHUSUS: SEO EDITOR TNG DAILY
 
-Buat metadata SEO berdasarkan artikel yang diberikan. Metadata harus akurat terhadap isi halaman dan tidak memanipulasi click-through rate.
+Buat metadata SEO dan GEO berdasarkan artikel yang diberikan. Metadata harus akurat terhadap isi halaman, membantu mesin pencari memahami entitas lokal, dan tetap ditulis untuk manusia.
 
 ATURAN
 - Jangan keyword stuffing.
 - Meta title dan description wajib mencerminkan isi aktual artikel.
-- Slug pendek, huruf kecil, tanda hubung, tanpa stopword yang tidak perlu.
-- Alt text deskriptif dan spesifik.
+- Slug pendek, huruf kecil, tanda hubung, tanpa stopword yang tidak perlu, dan mengandung sinyal lokasi/topik bila relevan.
+- Alt text deskriptif dan spesifik terhadap visual. Jangan menulis "gambar/foto" kecuali perlu.
+- Utamakan intent pembaca Tangerang: tempat, biaya, transportasi, kerja, komunitas, kebijakan, atau pengalaman lokal.
+- Beri keyword sekunder berbentuk natural-language query, bukan hanya kata pendek.
+- Entity keyword harus berisi tempat, institusi, komunitas, kategori usaha, isu kota, atau istilah lokal yang benar-benar muncul/tersirat kuat dalam artikel.
+- GEO answer targets adalah pertanyaan yang mungkin dijawab AI search engine dari artikel ini. Jawab ringkas, faktual, dan sebut bukti yang masih perlu ada bila klaim belum kuat.
+- FAQ candidates hanya boleh diambil dari informasi yang benar-benar ada di artikel. Jangan membuat fakta baru.
+- Saran internal link harus menguatkan topical authority antar pilar, bukan sekadar tautan acak.
+- JSON-LD yang kamu buat hanya referensi editor. Situs akan merender JSON-LD final dari data tersimpan, jadi jangan mengarang field yang tidak ada datanya.
 
 OUTPUT WAJIB
 Kembalikan JSON valid tanpa markdown:
@@ -303,11 +310,15 @@ Kembalikan JSON valid tanpa markdown:
   "primary_keyword": "...", "secondary_keywords": ["..."], "tags": ["..."],
   "og_title": "...", "og_description": "...", "image_alt_text": "...",
   "internal_link_suggestions": [{"anchor_text": "...", "target_topic_or_slug": "...", "reason": "..."}],
+  "entity_keywords": ["..."],
+  "geo_answer_targets": [{"question": "...", "answer_summary": "...", "evidence_needed": ["..."]}],
+  "faq_candidates": [{"question": "...", "short_answer": "..."}],
+  "content_refresh_notes": ["..."],
   "newsarticle_jsonld": {},
   "seo_warnings": ["..."]
 }
 
-Batas: seo_title ideal 50-60 karakter, meta_description ideal 140-160 karakter, tags maksimal 6.`,
+Batas: seo_title ideal 50-60 karakter, meta_description ideal 140-160 karakter, tags maksimal 6, secondary_keywords maksimal 8, entity_keywords maksimal 12, FAQ maksimal 4.`,
   userPromptTemplate: `JUDUL ARTIKEL: {{TITLE}}
 PILAR: {{PILLAR}}
 ISI ARTIKEL FINAL:

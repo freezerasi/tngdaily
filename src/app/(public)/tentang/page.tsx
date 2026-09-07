@@ -6,18 +6,35 @@ import { TapePatch } from "@/components/shared/tape-patch";
 import { Button } from "@/components/ui/button";
 import { PILLARS, PILLAR_META } from "@/types/domain";
 import { PILLAR_INK } from "@/lib/pillar-ink";
+import { staticPageJsonLd } from "@/lib/seo";
 import { cn } from "@/lib/utils";
+
+const PAGE_DESCRIPTION =
+  "Siapa yang bikin TNG Daily, apa yang kami liput, cara kami memakai AI, dan bagaimana kami menangani koreksi.";
 
 export const metadata: Metadata = {
   title: "Tentang TNG Daily",
-  description:
-    "Siapa yang bikin TNG Daily, apa yang kami liput, cara kami memakai AI, dan bagaimana kami menangani koreksi.",
+  description: PAGE_DESCRIPTION,
   alternates: { canonical: "/tentang" },
 };
 
 export default function TentangPage() {
   return (
     <Wall className="px-2 py-4">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            staticPageJsonLd({
+              path: "/tentang",
+              title: "Tentang TNG Daily",
+              description: PAGE_DESCRIPTION,
+              breadcrumbName: "Tentang",
+            }),
+          ),
+        }}
+      />
+
       <BannerPanel ink="bone" lift="lg" grommets className="p-5 sm:p-7">
         <TapePatch tone="wall" tilt="left">
           Tentang

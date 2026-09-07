@@ -138,6 +138,25 @@ export const seoOutputSchema = z.object({
       }),
     )
     .default([]),
+  entity_keywords: z.array(z.string()).default([]),
+  geo_answer_targets: z
+    .array(
+      z.object({
+        question: z.string().default(""),
+        answer_summary: z.string().default(""),
+        evidence_needed: z.array(z.string()).default([]),
+      }),
+    )
+    .default([]),
+  faq_candidates: z
+    .array(
+      z.object({
+        question: z.string().default(""),
+        short_answer: z.string().default(""),
+      }),
+    )
+    .default([]),
+  content_refresh_notes: z.array(z.string()).default([]),
   // Passed through unchanged; the site renders its own JSON-LD from stored
   // metadata, so a model-authored graph is reference material only.
   newsarticle_jsonld: z.unknown().optional(),

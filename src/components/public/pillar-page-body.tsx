@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { getPublishedArticles } from "@/lib/data/articles";
 import { getDirectoryListings } from "@/lib/data/directory";
 import { PILLAR_INK, onPanelText } from "@/lib/pillar-ink";
+import { pillarPageJsonLd } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 import { PILLAR_META, type Pillar } from "@/types/domain";
 import type { ArticleSummary } from "@/lib/data/types";
@@ -62,6 +63,13 @@ export async function PillarPageBody({
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(pillarPageJsonLd({ pillar, articles, tag })),
+        }}
+      />
+
       <FilterTabs active={pillar} showTrending={false} />
 
       <div className="mx-auto max-w-7xl px-3 sm:px-4">

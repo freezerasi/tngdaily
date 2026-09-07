@@ -17,7 +17,7 @@ import {
   getSessionReactions,
 } from "@/lib/data/articles";
 import { formatDateLong, formatFeedTime } from "@/lib/dates";
-import { articleMetadata, articleUrl, newsArticleJsonLd, breadcrumbJsonLd } from "@/lib/seo";
+import { articleJsonLdGraph, articleMetadata, articleUrl } from "@/lib/seo";
 import { readSessionId } from "@/lib/security/session";
 import { PILLAR_INK, onPanelText } from "@/lib/pillar-ink";
 import { cn } from "@/lib/utils";
@@ -54,21 +54,14 @@ export default async function ArticlePage({ params }: PageProps) {
   const url = articleUrl(article.slug);
 
   // Null for mock content: no structured data is emitted for a fixture.
-  const newsGraph = newsArticleJsonLd(article);
-  const breadcrumbGraph = breadcrumbJsonLd(article);
+  const articleGraph = articleJsonLdGraph(article);
 
   return (
     <Wall className="pb-24 lg:pb-8">
-      {newsGraph ? (
+      {articleGraph ? (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(newsGraph) }}
-        />
-      ) : null}
-      {breadcrumbGraph ? (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbGraph) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(articleGraph) }}
         />
       ) : null}
 

@@ -15,11 +15,14 @@ import {
 import { BannerPanel, Wall } from "@/components/shared/banner-panel";
 import { TapePatch } from "@/components/shared/tape-patch";
 import { PILLAR_INK } from "@/lib/pillar-ink";
+import { staticPageJsonLd } from "@/lib/seo";
 import { cn } from "@/lib/utils";
+
+const PAGE_DESCRIPTION = "Semua halaman TNG Daily dalam satu tempat.";
 
 export const metadata: Metadata = {
   title: "Menu",
-  description: "Semua halaman TNG Daily dalam satu tempat.",
+  description: PAGE_DESCRIPTION,
   alternates: { canonical: "/menu" },
 };
 
@@ -96,6 +99,20 @@ const GROUPS = [
 export default function MenuPage() {
   return (
     <Wall className="px-2 py-4">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            staticPageJsonLd({
+              path: "/menu",
+              title: "Menu TNG Daily",
+              description: PAGE_DESCRIPTION,
+              breadcrumbName: "Menu",
+            }),
+          ),
+        }}
+      />
+
       <BannerPanel ink="wall" lift="md" className="p-4 sm:p-5">
         <TapePatch tone="bone" tilt="left">
           Menu

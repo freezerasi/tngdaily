@@ -16,7 +16,12 @@ import { getPublishedArticles } from "@/lib/data/articles";
 import { getOnThisDay } from "@/lib/data/on-this-day";
 import { getPartnerStories } from "@/lib/data/partners";
 import { getRadarSlots } from "@/lib/data/radar";
-import { organizationJsonLd, SITE_DESCRIPTION } from "@/lib/seo";
+import {
+  homePageJsonLd,
+  organizationJsonLd,
+  SITE_DESCRIPTION,
+  websiteJsonLd,
+} from "@/lib/seo";
 import type { ArticleSummary } from "@/lib/data/types";
 
 export const metadata: Metadata = {
@@ -76,6 +81,14 @@ export default async function HomePage({
         type="application/ld+json"
         // Static, server-authored JSON-LD. No user input reaches this string.
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd()) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd()) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(homePageJsonLd(ordered)) }}
       />
 
       <h1 className="sr-only">

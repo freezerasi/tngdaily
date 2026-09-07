@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-/** Skeleton, not spinner. Shimmer runs along the banner grain. */
+/** Low-contrast skeleton for admin surfaces and long-running panels. */
 export function Skeleton({
   className,
   ...props
@@ -10,9 +10,33 @@ export function Skeleton({
   return (
     <div
       aria-hidden="true"
-      className={cn("tng-shimmer rounded-[3px] border-2 border-line", className)}
+      className={cn("tng-shimmer rounded-[3px]", className)}
       {...props}
     />
+  );
+}
+
+export function SoftPageLoading({ label = "Memuat TNG Daily" }: { label?: string }) {
+  return (
+    <div
+      className="grid min-h-[45svh] place-items-center px-4 py-10"
+      aria-busy="true"
+      aria-live="polite"
+      role="status"
+    >
+      <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-muted">
+        <span className="sr-only">{label}</span>
+        <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-lime" />
+        <span
+          aria-hidden="true"
+          className="h-2 w-2 animate-pulse rounded-full bg-orange [animation-delay:150ms]"
+        />
+        <span
+          aria-hidden="true"
+          className="h-2 w-2 animate-pulse rounded-full bg-bone [animation-delay:300ms]"
+        />
+      </div>
+    </div>
   );
 }
 

@@ -4,11 +4,14 @@ import { ContributionForm } from "@/components/public/contribution-form";
 import { BannerPanel, Wall } from "@/components/shared/banner-panel";
 import { TapePatch } from "@/components/shared/tape-patch";
 import { isSupabaseAdminConfigured } from "@/lib/env";
+import { staticPageJsonLd } from "@/lib/seo";
+
+const PAGE_DESCRIPTION =
+  "Kirim cerita, rekomendasi tempat, atau keluhan soal Tangerang. Semua kiriman lewat moderasi editor sebelum tayang.";
 
 export const metadata: Metadata = {
   title: "Kirim cerita ke TNG Daily",
-  description:
-    "Kirim cerita, rekomendasi tempat, atau keluhan soal Tangerang. Semua kiriman lewat moderasi editor sebelum tayang.",
+  description: PAGE_DESCRIPTION,
   alternates: { canonical: "/kontribusi" },
   robots: { index: true, follow: true },
 };
@@ -18,6 +21,20 @@ export default function KontribusiPage() {
 
   return (
     <Wall className="px-2 py-4">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            staticPageJsonLd({
+              path: "/kontribusi",
+              title: "Kirim cerita ke TNG Daily",
+              description: PAGE_DESCRIPTION,
+              breadcrumbName: "Kontribusi",
+            }),
+          ),
+        }}
+      />
+
       <BannerPanel ink="orange" lift="lg" grommets className="p-5 sm:p-7">
         <TapePatch tone="wall" tilt="left">
           Kirim cerita
