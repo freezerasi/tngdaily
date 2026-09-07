@@ -1,0 +1,357 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+import { getApiAuth } from "@/lib/auth";
+import { getAdminSupabase, getServerSupabase } from "@/lib/supabase/server";
+import { getSecretStore, SecretStoreError } from "@/lib/ai/secrets";
+import { testCandidate, type GatewayCandidate } from "@/lib/ai/gateway";
+import {
+  aiApiKeySchema,
+  aiKeyReorderSchema,
+  aiKeyStatusSchema,
+  aiProviderSchema,
+  fieldErrors,
+  uuidSchema,
+} from "@/lib/validation";
+
+/**
+ * AI configuration actions. Owner only.
+ *
+ * A submitted API key is written to the SecretStore and then discarded: only the
+ * vault reference and a masked preview are persisted, and neither the key nor
+ * the reference is ever returned to the browser.
+ */
+
+export interface AiActionResult {
+  ok: boolean;
+  message?: string;
+  fields?: Record<string, string>;
+}
+
+function fail(message: string, fields?: Record<string, string>): AiActionResult {
+  return fields ? { ok: false, message, fields } : { ok: false, message };
+}
+
+function refresh(): void {
+  revalidatePath("/admin/ai");
+}
+
+export async function createProviderAction(
+  raw: unknown,
+): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa mengatur provider AI.");
+
+  const parsed = aiProviderSchema.safeParse(raw);
+  if (!parsed.success) {
+    return fail("Data provider belum valid.", fieldErrors(parsed.error));
+  }
+
+  const supabase = await getServerSupabase();
+  if (!supabase) return fail("Database belum dikonfigurasi.");
+
+  const { error } = await supabase.from("ai_providers").insert({
+    name: parsed.data.name,
+    base_url: parsed.data.baseUrl.replace(/\/+$/, ""),
+    default_model: parsed.data.defaultModel,
+    is_active: parsed.data.isActive,
+    notes: parsed.data.notes || null,
+    created_by: auth.profile.id,
+  });
+
+  if (error) {
+    return fail(
+      error.code === "23505"
+        ? "Sudah ada provider dengan nama itu."
+        : "Provider gagal disimpan.",
+    );
+  }
+
+  refresh();
+  return { ok: true, message: "Provider ditambahkan." };
+}
+
+export async function toggleProviderAction(
+  providerId: string,
+  isActive: boolean,
+): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa mengatur provider AI.");
+
+  const id = uuidSchema.safeParse(providerId);
+  if (!id.success) return fail("ID provider tidak valid.");
+
+  const supabase = await getServerSupabase();
+  if (!supabase) return fail("Database belum dikonfigurasi.");
+
+  const { error } = await supabase
+    .from("ai_providers")
+    .update({ is_active: isActive })
+    .eq("id", id.data);
+
+  if (error) return fail("Status provider gagal diubah.");
+
+  refresh();
+  return {
+    ok: true,
+    message: isActive ? "Provider diaktifkan." : "Provider dinonaktifkan.",
+  };
+}
+
+export async function deleteProviderAction(
+  providerId: string,
+): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa menghapus provider AI.");
+
+  const id = uuidSchema.safeParse(providerId);
+  if (!id.success) return fail("ID provider tidak valid.");
+
+  const admin = getAdminSupabase();
+  const supabase = await getServerSupabase();
+  if (!supabase || !admin) return fail("Database belum dikonfigurasi.");
+
+  // Remove the stored secrets before the rows cascade away, otherwise the vault
+  // keeps orphaned entries nobody can reach.
+  const { data: keys } = await admin
+    .from("ai_api_keys")
+    .select("vault_secret_id")
+    .eq("provider_id", id.data);
+
+  const store = safeStore();
+  if (store) {
+    for (const row of (keys as Array<{ vault_secret_id: string }> | null) ?? []) {
+      await store.deleteSecret(row.vault_secret_id).catch(() => undefined);
+    }
+  }
+
+  const { error } = await supabase.from("ai_providers").delete().eq("id", id.data);
+  if (error) return fail("Provider gagal dihapus.");
+
+  refresh();
+  return { ok: true, message: "Provider dan key-nya dihapus." };
+}
+
+function safeStore() {
+  try {
+    return getSecretStore();
+  } catch {
+    return null;
+  }
+}
+
+export async function addApiKeyAction(raw: unknown): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa menambah API key.");
+
+  const parsed = aiApiKeySchema.safeParse(raw);
+  if (!parsed.success) {
+    return fail("Data key belum valid.", fieldErrors(parsed.error));
+  }
+
+  const admin = getAdminSupabase();
+  if (!admin) {
+    return fail(
+      "SUPABASE_SERVICE_ROLE_KEY belum diset, jadi key tidak bisa disimpan dengan aman.",
+    );
+  }
+
+  const { data: provider } = await admin
+    .from("ai_providers")
+    .select("id, name")
+    .eq("id", parsed.data.providerId)
+    .maybeSingle();
+
+  if (!provider) return fail("Provider tidak ditemukan.");
+
+  let stored: { secretId: string; preview: string };
+  try {
+    stored = await getSecretStore().saveSecret({
+      name: `tng-ai-${(provider as { name: string }).name}`
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-"),
+      value: parsed.data.apiKey,
+      description: "TNG Daily AI provider key",
+    });
+  } catch (error) {
+    return fail(
+      error instanceof SecretStoreError
+        ? error.message
+        : "Secret store menolak menyimpan key.",
+    );
+  }
+
+  const { error } = await admin.from("ai_api_keys").insert({
+    provider_id: parsed.data.providerId,
+    vault_secret_id: stored.secretId,
+    key_label: parsed.data.keyLabel || null,
+    key_preview: stored.preview,
+    priority: parsed.data.priority,
+    status: "active",
+  });
+
+  if (error) {
+    // Roll back the stored secret so a failed insert does not orphan it.
+    await getSecretStore().deleteSecret(stored.secretId).catch(() => undefined);
+    return fail("Key gagal disimpan.");
+  }
+
+  refresh();
+  return {
+    ok: true,
+    message: `Key tersimpan sebagai ${stored.preview}. Nilai aslinya tidak bisa dilihat lagi.`,
+  };
+}
+
+export async function reorderKeysAction(
+  raw: unknown,
+): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa mengubah prioritas key.");
+
+  const parsed = aiKeyReorderSchema.safeParse(raw);
+  if (!parsed.success) return fail("Urutan key tidak valid.");
+
+  const admin = getAdminSupabase();
+  if (!admin) return fail("Database belum dikonfigurasi.");
+
+  // Priorities are spaced by 10 so a later single insert can slot between two
+  // existing keys without renumbering the whole chain.
+  let priority = 10;
+  for (const keyId of parsed.data.order) {
+    const { error } = await admin
+      .from("ai_api_keys")
+      .update({ priority })
+      .eq("id", keyId);
+    if (error) return fail("Prioritas gagal disimpan.");
+    priority += 10;
+  }
+
+  refresh();
+  return { ok: true, message: "Urutan fallback diperbarui." };
+}
+
+export async function setKeyStatusAction(
+  raw: unknown,
+): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa mengubah status key.");
+
+  const parsed = aiKeyStatusSchema.safeParse(raw);
+  if (!parsed.success) return fail("Permintaan tidak valid.");
+
+  const admin = getAdminSupabase();
+  if (!admin) return fail("Database belum dikonfigurasi.");
+
+  const { error } = await admin
+    .from("ai_api_keys")
+    .update({
+      status: parsed.data.status,
+      last_error: parsed.data.status === "active" ? null : undefined,
+    })
+    .eq("id", parsed.data.keyId);
+
+  if (error) return fail("Status key gagal diubah.");
+
+  refresh();
+  return {
+    ok: true,
+    message:
+      parsed.data.status === "active"
+        ? "Key diaktifkan kembali."
+        : "Key dinonaktifkan.",
+  };
+}
+
+export async function deleteApiKeyAction(
+  keyId: string,
+): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa menghapus API key.");
+
+  const id = uuidSchema.safeParse(keyId);
+  if (!id.success) return fail("ID key tidak valid.");
+
+  const admin = getAdminSupabase();
+  if (!admin) return fail("Database belum dikonfigurasi.");
+
+  const { data } = await admin
+    .from("ai_api_keys")
+    .select("vault_secret_id")
+    .eq("id", id.data)
+    .maybeSingle();
+
+  const secretId = (data as { vault_secret_id: string } | null)?.vault_secret_id;
+
+  const { error } = await admin.from("ai_api_keys").delete().eq("id", id.data);
+  if (error) return fail("Key gagal dihapus.");
+
+  if (secretId) {
+    const store = safeStore();
+    await store?.deleteSecret(secretId).catch(() => undefined);
+  }
+
+  refresh();
+  return { ok: true, message: "Key dihapus." };
+}
+
+/**
+ * Connection test for one key. Deliberately does not use the fallback chain: an
+ * owner testing a key needs to know about that key.
+ */
+export async function testApiKeyAction(keyId: string): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa menguji koneksi.");
+
+  const id = uuidSchema.safeParse(keyId);
+  if (!id.success) return fail("ID key tidak valid.");
+
+  const admin = getAdminSupabase();
+  if (!admin) return fail("Database belum dikonfigurasi.");
+
+  const { data } = await admin
+    .from("ai_api_keys")
+    .select(
+      "id, provider_id, vault_secret_id, priority, ai_providers(id, name, base_url, default_model)",
+    )
+    .eq("id", id.data)
+    .maybeSingle();
+
+  if (!data) return fail("Key tidak ditemukan.");
+
+  const row = data as {
+    id: string;
+    provider_id: string;
+    vault_secret_id: string;
+    priority: number;
+    ai_providers:
+      | { id: string; name: string; base_url: string; default_model: string }
+      | Array<{ id: string; name: string; base_url: string; default_model: string }>
+      | null;
+  };
+
+  const provider = Array.isArray(row.ai_providers)
+    ? row.ai_providers[0]
+    : row.ai_providers;
+
+  if (!provider) return fail("Provider untuk key ini tidak ditemukan.");
+
+  const candidate: GatewayCandidate = {
+    keyId: row.id,
+    providerId: provider.id,
+    providerName: provider.name,
+    baseUrl: provider.base_url,
+    model: provider.default_model,
+    priority: row.priority,
+    isLocalFallback: false,
+    secretId: row.vault_secret_id,
+  };
+
+  const result = await testCandidate(candidate);
+  refresh();
+
+  return result.ok
+    ? { ok: true, message: `${provider.name}: ${result.message}` }
+    : fail(`${provider.name}: ${result.message}`);
+}

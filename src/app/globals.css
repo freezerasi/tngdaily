@@ -1,0 +1,581 @@
+@import "tailwindcss";
+
+/*
+ * TNG DAILY — banner-wall visual world
+ * Direction contract: .impeccable/surfaces/src-app-public-page-tsx.md
+ *
+ * Ground is a charcoal wall. Every unit of content is a vinyl banner panel
+ * with a black keyline, hard shadow, grommets, and stitched hems. Status is
+ * carried by a mark (tape patch, stencil, folded corner), never by hue alone.
+ */
+
+@theme {
+  /* ---- ground + surfaces --------------------------------------------- */
+  --color-wall: #0b0d0e;
+  --color-wall-deep: #050606;
+  --color-surface: #151819;
+  --color-surface-strong: #1c1f20;
+  --color-foreground: #f4f4ef;
+  --color-muted: #a4a8a2;
+  --color-line: #505451;
+  --color-keyline: #000000;
+
+  /* ---- banner inks ---------------------------------------------------- */
+  /*
+   * Two lime stops. `lime` is the accent at rest; `lime-bright` is the hover
+   * state, slightly hotter rather than lighter, so the press still reads on a
+   * dark ground. `lime-deep` is the pressed/edge value.
+   */
+  --color-lime: #ccff00;
+  --color-lime-bright: #d7ff24;
+  --color-lime-deep: #a4d321;
+  --color-orange: #ff6b3d;
+  --color-orange-deep: #d94f24;
+  --color-bone: #ece7d9;
+  --color-ink: #0d0f0c;
+  --color-danger: #ff5e5e;
+  --color-ok: #7ee787;
+  --color-tape: #d8cdae;
+
+  /* ---- type ----------------------------------------------------------- */
+  --font-display: var(--font-bricolage), "Arial Narrow", "Helvetica Neue",
+    system-ui, sans-serif;
+  --font-body: var(--font-manrope), system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+  /* ---- radii: medium, never pill ------------------------------------- */
+  --radius-panel: 4px;
+  --radius-patch: 2px;
+
+  /* ---- hard shadows --------------------------------------------------- */
+  --shadow-hard: 4px 4px 0 0 #000000;
+  --shadow-hard-sm: 2px 2px 0 0 #000000;
+  --shadow-hard-lg: 6px 6px 0 0 #000000;
+
+  /* ---- registration rail (one off-centre rail nothing leaves) -------- */
+  --rail-inset: 1.125rem;
+  --wall-reserve: 0.75rem;
+
+  /* ---- motion --------------------------------------------------------- */
+  /* A tacked banner settles; it does not bounce. Exponential ease-out. */
+  --ease-tack: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scrollbar-color: var(--color-line) var(--color-wall);
+  }
+
+  body {
+    background-color: var(--color-wall);
+    color: var(--color-foreground);
+    font-family: var(--font-body);
+    font-synthesis-weight: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* The wall itself: a faint concrete tooth, cheap enough for mobile. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      radial-gradient(
+        circle at 18% 12%,
+        rgba(201, 255, 59, 0.05),
+        transparent 42%
+      ),
+      radial-gradient(
+        circle at 82% 78%,
+        rgba(255, 107, 61, 0.045),
+        transparent 46%
+      ),
+      repeating-linear-gradient(
+        105deg,
+        rgba(255, 255, 255, 0.014) 0 1px,
+        transparent 1px 4px
+      );
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-lime);
+    outline-offset: 2px;
+    border-radius: 1px;
+  }
+
+  ::selection {
+    background: var(--color-lime);
+    color: var(--color-ink);
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+}
+
+@layer components {
+  /* ------------------------------------------------------------------ */
+  /* Banner panel: the single repeating unit of the whole product.      */
+  /* ------------------------------------------------------------------ */
+  .tng-banner {
+    position: relative;
+    border: 2px solid var(--color-keyline);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-hard);
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  /* Stitched hems: two rows of thread top and bottom. */
+  .tng-hem-stitch {
+    background-image: repeating-linear-gradient(
+      90deg,
+      currentColor 0 6px,
+      transparent 6px 12px
+    );
+    height: 1px;
+    opacity: 0.5;
+  }
+
+  /* Grommet: the eyelet punched through a banner corner. */
+  .tng-grommet {
+    width: 9px;
+    height: 9px;
+    border-radius: 9999px;
+    border: 2px solid rgba(0, 0, 0, 0.62);
+    background: color-mix(in oklab, var(--color-wall) 78%, transparent);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  }
+
+  /* Tape patch: correction over vinyl, carries status text. */
+  .tng-patch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.1875rem 0.5rem;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 2px solid var(--color-keyline);
+    border-radius: var(--radius-patch);
+    box-shadow: var(--shadow-hard-sm);
+    line-height: 1.1;
+  }
+
+  /* Stencil: sprayed through a cut plate, for the published mark. */
+  .tng-stencil {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    -webkit-text-stroke: 1px currentColor;
+    color: transparent;
+  }
+
+  /* Registration rail: one off-centre vertical line nothing leaves. */
+  .tng-rail::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--rail-inset);
+    width: 1px;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      var(--color-line) 6%,
+      var(--color-line) 94%,
+      transparent
+    );
+    pointer-events: none;
+  }
+
+  /*
+   * Content that hangs off the rail rather than crossing it. Used by any
+   * region drawn directly on the wall, where the rail would otherwise run
+   * through running text.
+   */
+  .tng-rail-hang {
+    padding-left: calc(var(--rail-inset) + 0.75rem);
+    padding-right: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .tng-rail-hang {
+      padding-left: calc(var(--rail-inset) + 1.25rem);
+      padding-right: 1.5rem;
+    }
+  }
+
+  /*
+   * Section heading row. Hangs its label off the rail so every section title on
+   * the wall starts on the same registration line.
+   */
+  .tng-section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding-left: calc(var(--rail-inset) + 0.625rem);
+    padding-right: 0.25rem;
+  }
+
+  /* Display headline: condensed, tight, monumental. */
+  .tng-display {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-stretch: 75%;
+    line-height: 0.92;
+    letter-spacing: -0.022em;
+    text-transform: uppercase;
+  }
+
+  .tng-display-tight {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-stretch: 82%;
+    line-height: 0.98;
+    letter-spacing: -0.018em;
+  }
+
+  /* Label: the small caps apparatus in the margin. */
+  .tng-label {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.6875rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  /* Reading measure: 65-75 characters on desktop. */
+  .tng-measure {
+    max-width: 66ch;
+  }
+
+  /* Feed scroll: snap by proximity so nothing traps the reader. */
+  .tng-feed {
+    scroll-snap-type: y proximity;
+    scroll-padding-top: 0.5rem;
+  }
+
+  .tng-feed > * {
+    scroll-snap-align: start;
+  }
+
+  /* Horizontal rails hide their scrollbar but keep native scrolling. */
+  .tng-scroll-x {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .tng-scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer utilities {
+  .tng-tack-in {
+    animation: tng-tack 320ms var(--ease-tack) both;
+  }
+
+  .tng-shimmer {
+    background-image: linear-gradient(
+      100deg,
+      var(--color-surface) 12%,
+      var(--color-surface-strong) 32%,
+      var(--color-surface) 52%
+    );
+    background-size: 220% 100%;
+    animation: tng-shimmer 1.5s linear infinite;
+  }
+}
+
+@keyframes tng-tack {
+  from {
+    transform: translateY(6px) rotate(-0.35deg);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes tng-shimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
+}
+
+/* Scroll nudge: down and out, no bounce back. */
+@keyframes tng-nudge {
+  0% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  45% {
+    transform: translateY(7px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+}
+
+/* Live indicator: a lamp, not a throb. Expands and fades once per cycle. */
+@keyframes tng-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+/* Ticker: one continuous pass. The track holds two copies of the content. */
+@keyframes tng-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .tng-feed {
+    scroll-snap-type: none;
+  }
+}
+
+/* Article prose, set for a phone held one-handed. */
+.tng-prose {
+  font-size: 1.0625rem;
+  line-height: 1.72;
+  color: var(--color-foreground);
+}
+
+.tng-prose > * + * {
+  margin-top: 1.15em;
+}
+
+.tng-prose h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: 85%;
+  font-size: 1.5rem;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  margin-top: 2.25em;
+  padding-top: 0.6em;
+  border-top: 2px solid var(--color-line);
+}
+
+.tng-prose h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1875rem;
+  line-height: 1.2;
+  margin-top: 1.9em;
+}
+
+.tng-prose a {
+  color: var(--color-lime);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.tng-prose a:hover {
+  background: var(--color-lime);
+  color: var(--color-ink);
+  text-decoration-color: transparent;
+}
+
+.tng-prose strong {
+  font-weight: 800;
+  color: var(--color-foreground);
+}
+
+.tng-prose ul,
+.tng-prose ol {
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.tng-prose ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.tng-prose ul > li {
+  position: relative;
+  padding-left: 1.35rem;
+}
+
+.tng-prose ul > li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 0.6rem;
+  height: 0.6rem;
+  background: var(--color-orange);
+  border: 1px solid var(--color-keyline);
+}
+
+.tng-prose ol {
+  list-style: decimal;
+}
+
+.tng-prose ol > li::marker {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--color-orange);
+}
+
+/*
+ * Pull quote: a bone strip glued onto the article, keyline all round and hard
+ * shadow, the way a printed insert sits on a banner. Not a left accent bar.
+ */
+.tng-prose blockquote {
+  position: relative;
+  border: 2px solid var(--color-keyline);
+  box-shadow: var(--shadow-hard-sm);
+  background: var(--color-bone);
+  color: var(--color-ink);
+  padding: 1.1rem 1rem 0.9rem;
+  margin-inline: -0.25rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-stretch: 88%;
+  font-size: 1.1875rem;
+  line-height: 1.24;
+}
+
+.tng-prose blockquote::before {
+  content: "";
+  position: absolute;
+  top: -0.55rem;
+  left: 1.25rem;
+  width: 3.25rem;
+  height: 1.1rem;
+  background: var(--color-tape);
+  border: 2px solid var(--color-keyline);
+  transform: rotate(-1.4deg);
+}
+
+.tng-prose blockquote p {
+  margin: 0;
+}
+
+.tng-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--color-surface-strong);
+  border: 1px solid var(--color-line);
+  padding: 0.1em 0.35em;
+}
+
+.tng-prose pre {
+  background: var(--color-wall-deep);
+  border: 2px solid var(--color-keyline);
+  box-shadow: var(--shadow-hard-sm);
+  padding: 0.9rem;
+  overflow-x: auto;
+}
+
+.tng-prose pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.tng-prose img {
+  border: 2px solid var(--color-keyline);
+  box-shadow: var(--shadow-hard-sm);
+  width: 100%;
+  height: auto;
+}
+
+.tng-prose hr {
+  border: 0;
+  border-top: 2px dashed var(--color-line);
+}
+
+.tng-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.tng-prose th,
+.tng-prose td {
+  border: 1px solid var(--color-line);
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+}
+
+.tng-prose th {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.75rem;
+  background: var(--color-surface-strong);
+}
+
+/* Verification flags the AI writer leaves behind must be impossible to miss. */
+.tng-prose mark {
+  background: var(--color-danger);
+  color: #fff;
+  padding: 0.05em 0.3em;
+  font-weight: 700;
+}
