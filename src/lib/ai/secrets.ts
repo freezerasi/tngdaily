@@ -96,7 +96,7 @@ class SupabaseVaultSecretStore implements SecretStore {
         details: error?.details,
         hint: error?.hint,
         dataType: typeof data,
-        data,
+        hasData: data !== null && data !== undefined,
       });
       throw new SecretStoreError(
         "vault_unavailable",
@@ -124,7 +124,6 @@ class SupabaseVaultSecretStore implements SecretStore {
 
     if (error || typeof data !== "string" || data.length === 0) {
       console.error("[vault] tng_vault_read_secret RPC failed:", {
-        secretId,
         code: error?.code,
         message: error?.message,
         details: error?.details,

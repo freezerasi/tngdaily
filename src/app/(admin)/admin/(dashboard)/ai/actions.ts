@@ -10,6 +10,7 @@ import {
   testCandidate,
   type GatewayCandidate,
 } from "@/lib/ai/gateway";
+import { env, isSupabaseAdminConfigured, isSupabaseConfigured } from "@/lib/env";
 import {
   aiApiKeySchema,
   aiDefaultProviderSchema,
@@ -44,6 +45,15 @@ function fail(message: string, fields?: Record<string, string>): AiActionResult 
 
 function refresh(): void {
   revalidatePath("/admin/ai");
+}
+
+function logKeySaveReadiness(scope: string): void {
+  console.warn(`[${scope}] API key save requested`, {
+    hasSupabaseConfig: isSupabaseConfigured(),
+    hasServiceRoleKey: isSupabaseAdminConfigured(),
+    secretStoreDriver: env.SECRET_STORE_DRIVER ?? "(unset)",
+    nodeEnv: env.NODE_ENV,
+  });
 }
 
 export async function createProviderAction(
@@ -84,8 +94,11 @@ export async function createProviderAction(
   }
 
   if (parsed.data.apiKey) {
+    logKeySaveReadiness("ai:createProvider");
+
     const admin = getAdminSupabase();
     if (!admin) {
+      console.error("[ai:createProvider] Admin Supabase client unavailable");
       await supabase.from("ai_providers").delete().eq("id", providerId);
       return fail(
         "SUPABASE_SERVICE_ROLE_KEY belum diset, jadi key tidak bisa disimpan dengan aman.",
@@ -94,18 +107,22 @@ export async function createProviderAction(
 
     let stored: { secretId: string; preview: string };
     try {
-      stored = await getSecretStore().saveSecret({
+      const store = getSecretStore();
+      console.warn("[ai:createProvider] Saving API key to secret store", {
+        driver: store.driver,
+      });
+      stored = await store.saveSecret({
         name: providerSecretName(parsed.data.name),
         value: parsed.data.apiKey,
         description: "TNG Daily AI provider key",
       });
     } catch (secretError) {
-      console.error("[ai:createProvider] Vault saveSecret failed:", secretError);
+      console.error("[ai:createProvider] Secret store save failed", secretError);
       await supabase.from("ai_providers").delete().eq("id", providerId);
       return fail(
         secretError instanceof SecretStoreError
           ? secretError.message
-          : "Secret store menolak menyimpan key.",
+          : `Secret store error: ${secretError instanceof Error ? secretError.message : String(secretError)}`,
       );
     }
 
@@ -119,7 +136,7 @@ export async function createProviderAction(
     });
 
     if (keyError) {
-      console.error("[ai:createProvider] ai_api_keys insert failed:", {
+      console.error("[ai:createProvider] ai_api_keys insert failed", {
         code: keyError.code,
         message: keyError.message,
         details: keyError.details,
@@ -400,41 +417,61 @@ function safeStore() {
 
 export async function addApiKeyAction(raw: unknown): Promise<AiActionResult> {
   const auth = await getApiAuth("owner");
-  if (!auth) return fail("Hanya owner yang bisa menambah API key.");
+  if (!auth) {
+    return fail("Hanya owner yang bisa menambah API key.");
+  }
 
   const parsed = aiApiKeySchema.safeParse(raw);
   if (!parsed.success) {
     return fail("Data key belum valid.", fieldErrors(parsed.error));
   }
+  logKeySaveReadiness("ai:addApiKey");
 
   const admin = getAdminSupabase();
   if (!admin) {
+    console.error("[ai:addApiKey] Admin Supabase client unavailable");
     return fail(
       "SUPABASE_SERVICE_ROLE_KEY belum diset, jadi key tidak bisa disimpan dengan aman.",
     );
   }
 
-  const { data: provider } = await admin
+  const { data: provider, error: providerError } = await admin
     .from("ai_providers")
     .select("id, name")
     .eq("id", parsed.data.providerId)
     .maybeSingle();
 
-  if (!provider) return fail("Provider tidak ditemukan.");
+  if (providerError) {
+    console.error("[ai:addApiKey] Provider lookup failed", {
+      code: providerError.code,
+      message: providerError.message,
+      details: providerError.details,
+      hint: providerError.hint,
+    });
+    return fail(`Provider gagal dibaca: ${providerError.message}`);
+  }
+
+  if (!provider) {
+    return fail("Provider tidak ditemukan.");
+  }
 
   let stored: { secretId: string; preview: string };
   try {
-    stored = await getSecretStore().saveSecret({
+    const store = getSecretStore();
+    console.warn("[ai:addApiKey] Saving API key to secret store", {
+      driver: store.driver,
+    });
+    stored = await store.saveSecret({
       name: providerSecretName((provider as { name: string }).name),
       value: parsed.data.apiKey,
       description: "TNG Daily AI provider key",
     });
   } catch (error) {
-    console.error("[ai:addApiKey] Vault saveSecret failed:", error);
+    console.error("[ai:addApiKey] Secret store save failed", error);
     return fail(
       error instanceof SecretStoreError
         ? error.message
-        : "Secret store menolak menyimpan key.",
+        : `Secret store error: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
@@ -448,7 +485,7 @@ export async function addApiKeyAction(raw: unknown): Promise<AiActionResult> {
   });
 
   if (error) {
-    console.error("[ai:addApiKey] ai_api_keys insert failed:", {
+    console.error("[ai:addApiKey] ai_api_keys insert failed", {
       code: error.code,
       message: error.message,
       details: error.details,
