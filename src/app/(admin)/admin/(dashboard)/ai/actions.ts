@@ -100,6 +100,7 @@ export async function createProviderAction(
         description: "TNG Daily AI provider key",
       });
     } catch (secretError) {
+      console.error("[ai:createProvider] Vault saveSecret failed:", secretError);
       await supabase.from("ai_providers").delete().eq("id", providerId);
       return fail(
         secretError instanceof SecretStoreError
@@ -118,11 +119,19 @@ export async function createProviderAction(
     });
 
     if (keyError) {
+      console.error("[ai:createProvider] ai_api_keys insert failed:", {
+        code: keyError.code,
+        message: keyError.message,
+        details: keyError.details,
+        hint: keyError.hint,
+      });
       await Promise.all([
         getSecretStore().deleteSecret(stored.secretId).catch(() => undefined),
         supabase.from("ai_providers").delete().eq("id", providerId),
       ]);
-      return fail("Provider dibuat, tetapi key gagal disimpan. Provider dibatalkan.");
+      return fail(
+        `Key gagal disimpan: ${keyError.message ?? "unknown error"}`,
+      );
     }
   }
 
@@ -421,6 +430,7 @@ export async function addApiKeyAction(raw: unknown): Promise<AiActionResult> {
       description: "TNG Daily AI provider key",
     });
   } catch (error) {
+    console.error("[ai:addApiKey] Vault saveSecret failed:", error);
     return fail(
       error instanceof SecretStoreError
         ? error.message
@@ -438,9 +448,17 @@ export async function addApiKeyAction(raw: unknown): Promise<AiActionResult> {
   });
 
   if (error) {
+    console.error("[ai:addApiKey] ai_api_keys insert failed:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
     // Roll back the stored secret so a failed insert does not orphan it.
     await getSecretStore().deleteSecret(stored.secretId).catch(() => undefined);
-    return fail("Key gagal disimpan.");
+    return fail(
+      `Key gagal disimpan: ${error.message ?? "unknown error"}`,
+    );
   }
 
   refresh();

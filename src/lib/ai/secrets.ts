@@ -90,9 +90,19 @@ class SupabaseVaultSecretStore implements SecretStore {
     });
 
     if (error || typeof data !== "string") {
+      console.error("[vault] tng_vault_create_secret RPC failed:", {
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        dataType: typeof data,
+        data,
+      });
       throw new SecretStoreError(
         "vault_unavailable",
-        "Supabase Vault menolak menyimpan secret. Pastikan extension supabase_vault aktif.",
+        error?.message
+          ? `Vault error: ${error.message}`
+          : "Supabase Vault menolak menyimpan secret. Pastikan extension supabase_vault aktif.",
       );
     }
 
@@ -113,9 +123,18 @@ class SupabaseVaultSecretStore implements SecretStore {
     });
 
     if (error || typeof data !== "string" || data.length === 0) {
+      console.error("[vault] tng_vault_read_secret RPC failed:", {
+        secretId,
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+      });
       throw new SecretStoreError(
         "not_found",
-        "Secret tidak ditemukan di Vault.",
+        error?.message
+          ? `Vault read error: ${error.message}`
+          : "Secret tidak ditemukan di Vault.",
       );
     }
     return data;
