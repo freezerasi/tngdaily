@@ -158,10 +158,24 @@ export function ArticleEditor({
   const persist = React.useCallback(
     async (values: ArticleUpsertValues): Promise<ActionResult> => {
       setSaveState({ kind: "saving" });
-      const result = await saveArticleAction({
-        ...values,
-        ...(articleId ? { id: articleId } : {}),
-      });
+      let result: ActionResult;
+      try {
+        result = await saveArticleAction({
+          ...values,
+          ...(articleId ? { id: articleId } : {}),
+        });
+      } catch (caught) {
+        // A server action can throw (network drop, expired session mid-save,
+        // dev-server rebuild). Without this guard the indicator sticks on
+        // "Menyimpan" and publishing silently does nothing.
+        result = {
+          ok: false,
+          message:
+            caught instanceof Error && caught.message
+              ? `Simpan gagal: ${caught.message}`
+              : "Simpan gagal. Periksa koneksi lalu coba lagi.",
+        };
+      }
 
       if (!result.ok) {
         setSaveState({
@@ -240,11 +254,22 @@ export function ArticleEditor({
       return;
     }
 
-    const result = await publishArticleAction({
-      articleId: targetId,
-      mode,
-      ...(mode === "schedule" ? { scheduledAt: scheduleValue } : {}),
-    });
+    let result: ActionResult;
+    try {
+      result = await publishArticleAction({
+        articleId: targetId,
+        mode,
+        ...(mode === "schedule" ? { scheduledAt: scheduleValue } : {}),
+      });
+    } catch (caught) {
+      result = {
+        ok: false,
+        message:
+          caught instanceof Error && caught.message
+            ? `Ubah status gagal: ${caught.message}`
+            : "Ubah status gagal. Coba lagi sebentar.",
+      };
+    }
 
     if (result.ok) {
       toast.success(result.message ?? "Status diubah.");
@@ -395,6 +420,11 @@ export function ArticleEditor({
             />
             <SaveIndicator state={saveState} />
           </div>
+          {saveState.kind === "error" && saveState.message ? (
+            <p className="border-l-2 border-danger bg-danger/10 px-2.5 py-2 text-[0.8125rem] font-semibold text-danger">
+              {saveState.message}
+            </p>
+          ) : null}
 
           <div className="grid gap-2">
             <Button type="submit" variant="outline" size="md" block disabled={isSubmitting}>

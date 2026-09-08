@@ -65,7 +65,16 @@ function revalidateArticle(slug: string | null): void {
 export async function saveArticleAction(
   raw: unknown,
 ): Promise<ActionResult> {
-  const auth = await getApiAuth("editor");
+  let auth;
+  try {
+    auth = await getApiAuth("editor");
+  } catch (caught) {
+    return fail(
+      caught instanceof Error
+        ? `Sesi tidak bisa diverifikasi: ${caught.message}`
+        : "Sesi tidak bisa diverifikasi. Login ulang lalu coba lagi.",
+    );
+  }
   if (!auth) return fail("Kamu tidak punya akses untuk menyimpan artikel.");
 
   const parsed = articleUpsertSchema.safeParse(raw);
@@ -84,13 +93,32 @@ export async function saveArticleAction(
   let slug = slugify(values.slug || values.title);
   if (!slug) return fail("Slug tidak bisa dibuat dari judul ini.");
 
-  if (await slugTaken(slug, values.id)) {
+  let taken: boolean;
+  try {
+    taken = await slugTaken(slug, values.id);
+  } catch (caught) {
+    return fail(
+      caught instanceof Error
+        ? `Slug tidak bisa diperiksa: ${caught.message}`
+        : "Slug tidak bisa diperiksa. Coba lagi sebentar.",
+    );
+  }
+
+  if (taken) {
     if (values.id) {
       return fail("Slug sudah dipakai artikel lain.", {
         slug: "Slug sudah dipakai artikel lain.",
       });
     }
-    slug = await uniqueSlug(slug, (candidate) => slugTaken(candidate));
+    try {
+      slug = await uniqueSlug(slug, (candidate) => slugTaken(candidate));
+    } catch (caught) {
+      return fail(
+        caught instanceof Error
+          ? `Slug tidak bisa dibuat: ${caught.message}`
+          : "Slug tidak bisa dibuat. Coba lagi sebentar.",
+      );
+    }
   }
 
   const status: ArticleStatus = values.status;
@@ -139,16 +167,29 @@ export async function saveArticleAction(
   };
 
   if (values.id) {
-    const { error } = await supabase
-      .from("articles")
-      .update(payload)
-      .eq("id", values.id);
+    let updateError: { code?: string; message: string } | null = null;
+    try {
+      const { error } = await supabase
+        .from("articles")
+        .update(payload)
+        .eq("id", values.id);
+      updateError = error;
+    } catch (caught) {
+      // postgrest throws on network-level failures; surface a readable
+      // message instead of letting the action crash with a generic error.
+      updateError = {
+        message:
+          caught instanceof Error ? caught.message : "Koneksi database gagal.",
+      };
+    }
 
-    if (error) {
+    if (updateError) {
       return fail(
-        error.code === "23505"
+        updateError.code === "23505"
           ? "Slug sudah dipakai artikel lain."
-          : "Artikel gagal disimpan.",
+          : updateError.code
+            ? `Artikel gagal disimpan (kode ${updateError.code}). Coba lagi.`
+            : `Artikel gagal disimpan: ${updateError.message}`,
       );
     }
 
@@ -163,14 +204,29 @@ export async function saveArticleAction(
     };
   }
 
-  const { data, error } = await supabase
-    .from("articles")
-    .insert(payload)
-    .select("id")
-    .maybeSingle();
+  let insertData: { id: string } | null = null;
+  let insertError: { message: string } | null = null;
+  try {
+    const { data, error } = await supabase
+      .from("articles")
+      .insert(payload)
+      .select("id")
+      .maybeSingle();
+    insertData = (data as { id: string } | null) ?? null;
+    insertError = error;
+  } catch (caught) {
+    insertError = {
+      message:
+        caught instanceof Error ? caught.message : "Koneksi database gagal.",
+    };
+  }
 
-  if (error || !data) {
-    return fail("Artikel gagal dibuat.");
+  if (insertError || !insertData) {
+    return fail(
+      insertError
+        ? `Artikel gagal dibuat: ${insertError.message}`
+        : "Artikel gagal dibuat.",
+    );
   }
 
   revalidateArticle(slug);
@@ -179,7 +235,7 @@ export async function saveArticleAction(
   return {
     ok: true,
     message: "Artikel dibuat sebagai draft.",
-    articleId: (data as { id: string }).id,
+    articleId: insertData.id,
     slug,
     savedAt: new Date().toISOString(),
   };
@@ -194,7 +250,16 @@ export async function publishArticleAction(input: {
   mode: "publish" | "schedule" | "unpublish" | "archive";
   scheduledAt?: string;
 }): Promise<ActionResult> {
-  const auth = await getApiAuth("editor");
+  let auth;
+  try {
+    auth = await getApiAuth("editor");
+  } catch (caught) {
+    return fail(
+      caught instanceof Error
+        ? `Sesi tidak bisa diverifikasi: ${caught.message}`
+        : "Sesi tidak bisa diverifikasi. Login ulang lalu coba lagi.",
+    );
+  }
   if (!auth) return fail("Kamu tidak punya akses untuk menerbitkan artikel.");
 
   const id = uuidSchema.safeParse(input.articleId);
@@ -203,20 +268,31 @@ export async function publishArticleAction(input: {
   const supabase = await getServerSupabase();
   if (!supabase) return fail("Database belum dikonfigurasi.");
 
-  const { data: existing } = await supabase
-    .from("articles")
-    .select("slug, title, content_markdown, published_at")
-    .eq("id", id.data)
-    .maybeSingle();
-
-  if (!existing) return fail("Artikel tidak ditemukan.");
-
-  const row = existing as {
+  type PublishRow = {
     slug: string;
     title: string;
     content_markdown: string;
     published_at: string | null;
   };
+  let existing: PublishRow | null = null;
+  try {
+    const { data } = await supabase
+      .from("articles")
+      .select("slug, title, content_markdown, published_at")
+      .eq("id", id.data)
+      .maybeSingle();
+    existing = (data as PublishRow | null) ?? null;
+  } catch (caught) {
+    return fail(
+      caught instanceof Error
+        ? `Artikel tidak bisa dibaca: ${caught.message}`
+        : "Artikel tidak bisa dibaca dari database.",
+    );
+  }
+
+  if (!existing) return fail("Artikel tidak ditemukan.");
+
+  const row: PublishRow = existing;
 
   const now = new Date().toISOString();
   let update: Record<string, unknown>;
@@ -253,8 +329,22 @@ export async function publishArticleAction(input: {
       break;
   }
 
-  const { error } = await supabase.from("articles").update(update).eq("id", id.data);
-  if (error) return fail("Status artikel gagal diubah.");
+  let publishError: { message: string } | null = null;
+  try {
+    const { error } = await supabase
+      .from("articles")
+      .update(update)
+      .eq("id", id.data);
+    publishError = error;
+  } catch (caught) {
+    publishError = {
+      message:
+        caught instanceof Error ? caught.message : "Koneksi database gagal.",
+    };
+  }
+  if (publishError) {
+    return fail(`Status artikel gagal diubah: ${publishError.message}`);
+  }
 
   revalidateArticle(row.slug);
   revalidatePath("/admin/konten");
