@@ -10,6 +10,13 @@ import {
   testCandidate,
   type GatewayCandidate,
 } from "@/lib/ai/gateway";
+import {
+  createAiApiKeyMetadata,
+  deleteAiApiKeyMetadata,
+  setAiApiKeyPriority,
+  updateAiApiKeyState,
+  type AiKeyMutationError,
+} from "@/lib/ai/key-metadata";
 import { env, isSupabaseAdminConfigured, isSupabaseConfigured } from "@/lib/env";
 import {
   aiApiKeySchema,
@@ -44,7 +51,11 @@ function fail(message: string, fields?: Record<string, string>): AiActionResult 
 }
 
 function refresh(): void {
-  revalidatePath("/admin/ai");
+  try {
+    revalidatePath("/admin/ai");
+  } catch (error) {
+    console.error("[ai] Failed to revalidate /admin/ai", error);
+  }
 }
 
 function logKeySaveReadiness(scope: string): void {
@@ -53,6 +64,15 @@ function logKeySaveReadiness(scope: string): void {
     hasServiceRoleKey: isSupabaseAdminConfigured(),
     secretStoreDriver: env.SECRET_STORE_DRIVER ?? "(unset)",
     nodeEnv: env.NODE_ENV,
+  });
+}
+
+function logKeyMutationError(scope: string, error: AiKeyMutationError): void {
+  console.error(`[${scope}] ai_api_keys metadata mutation failed`, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
   });
 }
 
@@ -126,28 +146,23 @@ export async function createProviderAction(
       );
     }
 
-    const { error: keyError } = await admin.from("ai_api_keys").insert({
-      provider_id: providerId,
-      vault_secret_id: stored.secretId,
-      key_label: parsed.data.keyLabel || null,
-      key_preview: stored.preview,
+    const keyResult = await createAiApiKeyMetadata({
+      providerId,
+      secretId: stored.secretId,
+      keyLabel: parsed.data.keyLabel || null,
+      keyPreview: stored.preview,
       priority: 10,
       status: "active",
     });
 
-    if (keyError) {
-      console.error("[ai:createProvider] ai_api_keys insert failed", {
-        code: keyError.code,
-        message: keyError.message,
-        details: keyError.details,
-        hint: keyError.hint,
-      });
+    if (!keyResult.ok) {
+      logKeyMutationError("ai:createProvider", keyResult.error);
       await Promise.all([
         getSecretStore().deleteSecret(stored.secretId).catch(() => undefined),
         supabase.from("ai_providers").delete().eq("id", providerId),
       ]);
       return fail(
-        `Key gagal disimpan: ${keyError.message ?? "unknown error"}`,
+        `Key gagal disimpan: ${keyResult.error.message}`,
       );
     }
   }
@@ -236,6 +251,7 @@ export async function detectProviderModelsAction(
     provider_id: provider.id,
     model_key: model,
     display_name: model,
+    is_enabled: false,
     source: "detected",
     last_seen_at: now,
   }));
@@ -246,20 +262,47 @@ export async function detectProviderModelsAction(
 
   if (error) return fail("Daftar model gagal disimpan.");
 
-  if (
-    result.models[0] &&
-    (!provider.default_model || !result.models.includes(provider.default_model))
-  ) {
-    await admin
+  const { error: disableError } = await admin
+    .from("ai_models")
+    .update({ is_enabled: false })
+    .eq("provider_id", provider.id);
+
+  if (disableError) return fail("Model terdeteksi, tetapi statusnya gagal dinonaktifkan.");
+
+  const { data: providerModels, error: modelIdsError } = await admin
+    .from("ai_models")
+    .select("id")
+    .eq("provider_id", provider.id);
+
+  if (modelIdsError) {
+    return fail("Model terdeteksi, tetapi daftar model provider gagal dibaca.");
+  }
+
+  const modelIds = (
+    (providerModels as Array<{ id: string }> | null) ?? []
+  ).map((model) => model.id);
+
+  const [providerUpdate, taskRouteUpdate] = await Promise.all([
+    admin
       .from("ai_providers")
-      .update({ default_model: result.models[0] })
-      .eq("id", provider.id);
+      .update({ default_model: null })
+      .eq("id", provider.id),
+    modelIds.length > 0
+      ? admin
+          .from("ai_task_models")
+          .update({ is_enabled: false })
+          .in("model_id", modelIds)
+      : Promise.resolve({ error: null }),
+  ]);
+
+  if (providerUpdate.error || taskRouteUpdate.error) {
+    return fail("Model terdeteksi, tetapi reset model utama/fallback gagal.");
   }
 
   refresh();
   return {
     ok: true,
-    message: `${provider.name}: ${result.models.length} model terdeteksi dalam ${result.latencyMs} ms.`,
+    message: `${provider.name}: ${result.models.length} model terdeteksi dalam ${result.latencyMs} ms. Semua model masih nonaktif.`,
   };
 }
 
@@ -353,11 +396,11 @@ export async function setDefaultProviderAction(
 
   let priority = 10;
   for (const key of sorted) {
-    const { error } = await admin
-      .from("ai_api_keys")
-      .update({ priority })
-      .eq("id", key.id);
-    if (error) return fail("Provider default gagal disimpan.");
+    const result = await setAiApiKeyPriority({ keyId: key.id, priority });
+    if (!result.ok) {
+      logKeyMutationError("ai:setDefaultProvider", result.error);
+      return fail("Provider default gagal disimpan.");
+    }
     priority += 10;
   }
 
@@ -475,26 +518,21 @@ export async function addApiKeyAction(raw: unknown): Promise<AiActionResult> {
     );
   }
 
-  const { error } = await admin.from("ai_api_keys").insert({
-    provider_id: parsed.data.providerId,
-    vault_secret_id: stored.secretId,
-    key_label: parsed.data.keyLabel || null,
-    key_preview: stored.preview,
+  const keyResult = await createAiApiKeyMetadata({
+    providerId: parsed.data.providerId,
+    secretId: stored.secretId,
+    keyLabel: parsed.data.keyLabel || null,
+    keyPreview: stored.preview,
     priority: parsed.data.priority,
     status: "active",
   });
 
-  if (error) {
-    console.error("[ai:addApiKey] ai_api_keys insert failed", {
-      code: error.code,
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-    });
+  if (!keyResult.ok) {
+    logKeyMutationError("ai:addApiKey", keyResult.error);
     // Roll back the stored secret so a failed insert does not orphan it.
     await getSecretStore().deleteSecret(stored.secretId).catch(() => undefined);
     return fail(
-      `Key gagal disimpan: ${error.message ?? "unknown error"}`,
+      `Key gagal disimpan: ${keyResult.error.message}`,
     );
   }
 
@@ -521,11 +559,11 @@ export async function reorderKeysAction(
   // existing keys without renumbering the whole chain.
   let priority = 10;
   for (const keyId of parsed.data.order) {
-    const { error } = await admin
-      .from("ai_api_keys")
-      .update({ priority })
-      .eq("id", keyId);
-    if (error) return fail("Prioritas gagal disimpan.");
+    const result = await setAiApiKeyPriority({ keyId, priority });
+    if (!result.ok) {
+      logKeyMutationError("ai:reorderKeys", result.error);
+      return fail("Prioritas gagal disimpan.");
+    }
     priority += 10;
   }
 
@@ -545,15 +583,16 @@ export async function setKeyStatusAction(
   const admin = getAdminSupabase();
   if (!admin) return fail("Database belum dikonfigurasi.");
 
-  const { error } = await admin
-    .from("ai_api_keys")
-    .update({
-      status: parsed.data.status,
-      last_error: parsed.data.status === "active" ? null : undefined,
-    })
-    .eq("id", parsed.data.keyId);
+  const result = await updateAiApiKeyState({
+    keyId: parsed.data.keyId,
+    status: parsed.data.status,
+    clearLastError: parsed.data.status === "active",
+  });
 
-  if (error) return fail("Status key gagal diubah.");
+  if (!result.ok) {
+    logKeyMutationError("ai:setKeyStatus", result.error);
+    return fail("Status key gagal diubah.");
+  }
 
   refresh();
   return {
@@ -587,6 +626,26 @@ export async function setModelStatusAction(raw: unknown): Promise<AiActionResult
 
   if (!model) return fail("Model tidak ditemukan.");
 
+  const [{ data: providerRow }, { count: enabledCount, error: countError }] =
+    await Promise.all([
+      admin
+        .from("ai_providers")
+        .select("default_model")
+        .eq("id", model.provider_id)
+        .maybeSingle(),
+      parsed.data.isEnabled
+        ? admin
+            .from("ai_models")
+            .select("id", { count: "exact", head: true })
+            .eq("provider_id", model.provider_id)
+            .eq("is_enabled", true)
+        : Promise.resolve({ count: null, error: null }),
+    ]);
+
+  if (countError) return fail("Status model gagal diperiksa.");
+
+  const provider = providerRow as { default_model: string | null } | null;
+
   const { error } = await admin
     .from("ai_models")
     .update({ is_enabled: parsed.data.isEnabled })
@@ -594,19 +653,23 @@ export async function setModelStatusAction(raw: unknown): Promise<AiActionResult
 
   if (error) return fail("Status model gagal disimpan.");
 
-  if (!parsed.data.isEnabled) {
+  if (parsed.data.isEnabled) {
+    const isFirstEnabled = (enabledCount ?? 0) === 0;
+    if (isFirstEnabled || !provider?.default_model) {
+      const { error: providerError } = await admin
+        .from("ai_providers")
+        .update({ default_model: model.model_key, is_active: true })
+        .eq("id", model.provider_id);
+
+      if (providerError) {
+        return fail("Model diaktifkan, tetapi model utama gagal disimpan.");
+      }
+    }
+  } else {
     await admin
       .from("ai_task_models")
       .update({ is_enabled: false })
       .eq("model_id", parsed.data.modelId);
-
-    const { data: providerRow } = await admin
-      .from("ai_providers")
-      .select("default_model")
-      .eq("id", model.provider_id)
-      .maybeSingle();
-
-    const provider = providerRow as { default_model: string | null } | null;
 
     if (provider?.default_model === model.model_key) {
       const { data: nextModel } = await admin
@@ -749,8 +812,11 @@ export async function deleteApiKeyAction(
 
   const secretId = (data as { vault_secret_id: string } | null)?.vault_secret_id;
 
-  const { error } = await admin.from("ai_api_keys").delete().eq("id", id.data);
-  if (error) return fail("Key gagal dihapus.");
+  const result = await deleteAiApiKeyMetadata(id.data);
+  if (!result.ok) {
+    logKeyMutationError("ai:deleteApiKey", result.error);
+    return fail("Key gagal dihapus.");
+  }
 
   if (secretId) {
     const store = safeStore();

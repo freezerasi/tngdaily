@@ -340,8 +340,8 @@ function ProviderCard({
         ) : (
           <>
             <p className="text-[0.8125rem] text-muted">
-              Model utama dipakai lebih dulu. Model aktif lain menjadi fallback
-              default provider dan tetap bisa dipilih manual per task.
+              Model hasil deteksi tetap nonaktif sampai diaktifkan manual. Model
+              pertama yang aktif menjadi model utama provider.
             </p>
             <ul className="grid gap-2 sm:grid-cols-2">
               {provider.models.map((model) => (
@@ -986,46 +986,58 @@ function ProviderDialog({ disabled }: { disabled: boolean }) {
   const submit = async () => {
     setPending(true);
     setErrors({});
-    const result = await createProviderAction({
-      name: values.name,
-      baseUrl: values.baseUrl,
-      apiKey: values.apiKey,
-      keyLabel: values.keyLabel,
-      defaultModel: values.defaultModel,
-      notes: values.notes,
-      isActive: true,
-    });
 
-    if (!result.ok) {
-      setPending(false);
-      setErrors(result.fields ?? {});
-      toast.error(result.message ?? "Provider gagal disimpan.");
-      return;
-    }
+    try {
+      const result = await createProviderAction({
+        name: values.name,
+        baseUrl: values.baseUrl,
+        apiKey: values.apiKey,
+        keyLabel: values.keyLabel,
+        defaultModel: values.defaultModel,
+        notes: values.notes,
+        isActive: true,
+      });
 
-    if (values.detectModels && result.providerId) {
-      const detected = await detectProviderModelsAction(result.providerId);
-      if (detected.ok) {
-        toast.success(detected.message ?? "Provider ditambahkan dan model terdeteksi.");
-      } else {
-        toast.error(detected.message ?? "Provider tersimpan, tetapi deteksi model gagal.");
+      if (!result.ok) {
+        setErrors(result.fields ?? {});
+        toast.error(result.message ?? "Provider gagal disimpan.");
+        return;
       }
-    } else {
-      toast.success(result.message ?? "Provider ditambahkan.");
-    }
 
-    setPending(false);
-    setValues({
-      name: "",
-      baseUrl: "",
-      apiKey: "",
-      keyLabel: "",
-      defaultModel: "",
-      notes: "",
-      detectModels: true,
-    });
-    setOpen(false);
-    router.refresh();
+      if (values.detectModels && result.providerId) {
+        const detected = await detectProviderModelsAction(result.providerId);
+        if (detected.ok) {
+          toast.success(detected.message ?? "Provider ditambahkan dan model terdeteksi.");
+        } else {
+          toast.success(result.message ?? "Provider dan API key ditambahkan.");
+          toast.warning(
+            detected.message ?? "Provider tersimpan, tetapi deteksi model belum berhasil.",
+          );
+        }
+      } else {
+        toast.success(result.message ?? "Provider ditambahkan.");
+      }
+
+      setValues({
+        name: "",
+        baseUrl: "",
+        apiKey: "",
+        keyLabel: "",
+        defaultModel: "",
+        notes: "",
+        detectModels: true,
+      });
+      setOpen(false);
+      router.refresh();
+    } catch (error) {
+      console.error("[ai:provider-dialog] Provider save status uncertain", error);
+      toast.warning(
+        "Status simpan provider belum bisa dikonfirmasi. Daftar provider dimuat ulang.",
+      );
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
   };
 
   return (
@@ -1147,7 +1159,7 @@ function ProviderDialog({ disabled }: { disabled: boolean }) {
                   Deteksi model setelah simpan
                 </span>
                 <span className="block text-[0.75rem] text-muted">
-                  Jika berhasil, model pertama menjadi model utama sementara.
+                  Jika berhasil, semua model tetap nonaktif sampai dipilih manual.
                 </span>
               </span>
             </label>
@@ -1200,23 +1212,33 @@ function ApiKeyDialog({
   const submit = async () => {
     setPending(true);
     setErrors({});
-    const result = await addApiKeyAction({
-      providerId,
-      apiKey,
-      keyLabel: label,
-      priority: 100,
-    });
-    setPending(false);
 
-    if (result.ok) {
-      toast.success(result.message ?? "Key tersimpan.");
-      setApiKey("");
-      setLabel("");
-      setOpen(false);
+    try {
+      const result = await addApiKeyAction({
+        providerId,
+        apiKey,
+        keyLabel: label,
+        priority: 100,
+      });
+
+      if (result.ok) {
+        toast.success(result.message ?? "Key tersimpan.");
+        setApiKey("");
+        setLabel("");
+        setOpen(false);
+        router.refresh();
+      } else {
+        setErrors(result.fields ?? {});
+        toast.error(result.message ?? "Key gagal disimpan.");
+      }
+    } catch (error) {
+      console.error("[ai:key-dialog] API key save status uncertain", error);
+      toast.warning(
+        "Status simpan key belum bisa dikonfirmasi. Daftar key dimuat ulang.",
+      );
       router.refresh();
-    } else {
-      setErrors(result.fields ?? {});
-      toast.error(result.message ?? "Key gagal disimpan.");
+    } finally {
+      setPending(false);
     }
   };
 

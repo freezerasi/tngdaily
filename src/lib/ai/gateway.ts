@@ -4,6 +4,7 @@ import type { z } from "zod";
 
 import { env, isProduction } from "@/lib/env";
 import { getAdminSupabase } from "@/lib/supabase/server";
+import { updateAiApiKeyState } from "@/lib/ai/key-metadata";
 import { getSecretStore, SecretStoreError } from "@/lib/ai/secrets";
 import {
   backoffDelayMs,
@@ -390,16 +391,21 @@ async function markKey(
   },
 ): Promise<void> {
   if (!keyId) return;
-  const admin = getAdminSupabase();
-  if (!admin) return;
+  if (
+    !patch.status &&
+    patch.lastError === undefined &&
+    !patch.touchLastUsed
+  ) {
+    return;
+  }
 
-  const update: Record<string, unknown> = {};
-  if (patch.status) update.status = patch.status;
-  if (patch.lastError !== undefined) update.last_error = patch.lastError;
-  if (patch.touchLastUsed) update.last_used_at = new Date().toISOString();
-  if (Object.keys(update).length === 0) return;
-
-  await admin.from("ai_api_keys").update(update).eq("id", keyId);
+  await updateAiApiKeyState({
+    keyId,
+    status: patch.status ?? null,
+    lastError: patch.lastError,
+    clearLastError: patch.lastError === null,
+    touchLastUsed: patch.touchLastUsed,
+  });
 }
 
 // ---------------------------------------------------------------------------
