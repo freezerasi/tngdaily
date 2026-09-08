@@ -2,7 +2,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 
-import type { CityWeather, NewsroomPulse } from "@/lib/data/pulse";
+import type { CityWeather } from "@/lib/data/pulse";
 
 /**
  * PulseBar: the utility strip above the masthead.
@@ -18,10 +18,8 @@ import type { CityWeather, NewsroomPulse } from "@/lib/data/pulse";
  */
 export function PulseBar({
   weather,
-  newsroom,
 }: {
   weather: CityWeather | null;
-  newsroom?: NewsroomPulse;
 }) {
   const today = new Date();
   const longDate = format(today, "EEEE, dd MMM", { locale: localeId }).toUpperCase();
@@ -57,25 +55,14 @@ export function PulseBar({
               <span className="hidden truncate sm:inline">{weather.condition}</span>
             </span>
           ) : null}
-
-          {newsroom ? (
-            <span className="hidden items-center gap-1.5 text-[0.625rem] text-muted lg:inline-flex">
-              <span aria-hidden="true" className="text-line">
-                &bull;
-              </span>
-              <span className="tabular-nums">
-                {newsroom.publishedCount} artikel tayang
-              </span>
-            </span>
-          ) : null}
         </div>
 
         <div className="flex shrink-0 items-center gap-2 text-[0.625rem] sm:gap-3">
           <Link
-            href="/kontribusi"
+            href="/kirim-berita"
             className="tng-label hidden tracking-wider text-muted transition-colors hover:text-lime sm:inline"
           >
-            KIRIM CERITA
+            KIRIM BERITA
           </Link>
           <span aria-hidden="true" className="hidden text-line sm:inline">
             |

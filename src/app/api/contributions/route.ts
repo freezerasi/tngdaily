@@ -8,7 +8,11 @@ import {
   tooManyRequests,
 } from "@/lib/security/rate-limit";
 import { clientAddressFrom, hashClientIdentifier } from "@/lib/security/session";
-import { contributionFormSchema, fieldErrors } from "@/lib/validation";
+import {
+  contributionFormSchema,
+  kirimBeritaFormSchema,
+  fieldErrors,
+} from "@/lib/validation";
 
 export const runtime = "nodejs";
 
@@ -47,12 +51,69 @@ export async function POST(request: NextRequest) {
   }
 
   const body: unknown = await request.json().catch(() => null);
-  const parsed = contributionFormSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Data kiriman belum lengkap.", fields: fieldErrors(parsed.error) },
-      { status: 400 },
-    );
+  const isKirimBerita =
+    body !== null &&
+    typeof body === "object" &&
+    ("fullName" in body || "displayName" in body || "whatsapp" in body);
+
+  let insertData: {
+    contributor_name: string;
+    contributor_contact: string | null;
+    title: string;
+    content: string;
+    pillar: "vibes" | "suara" | "hustle" | "story";
+    location: string | null;
+    media_urls: string[];
+    consent_publish: boolean;
+    consent_edit: boolean;
+    status: "pending";
+    submitter_hash: string;
+  };
+
+  if (isKirimBerita) {
+    const parsed = kirimBeritaFormSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Data kiriman belum lengkap.", fields: fieldErrors(parsed.error) },
+        { status: 400 },
+      );
+    }
+    const val = parsed.data;
+    insertData = {
+      contributor_name: val.displayName.slice(0, 80),
+      contributor_contact: `${val.email} | WA: ${val.whatsapp} (${val.fullName})`.slice(0, 120),
+      title: val.title,
+      content: val.content,
+      pillar: "suara",
+      location: val.district || null,
+      media_urls: val.mediaUrl ? [val.mediaUrl] : [],
+      consent_publish: true,
+      consent_edit: true,
+      status: "pending",
+      submitter_hash: ipHash,
+    };
+  } else {
+    const parsed = contributionFormSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Data kiriman belum lengkap.", fields: fieldErrors(parsed.error) },
+        { status: 400 },
+      );
+    }
+    const val = parsed.data;
+    insertData = {
+      contributor_name: val.contributorName,
+      contributor_contact: val.contributorContact || null,
+      title: val.title,
+      content: val.content,
+      pillar: val.pillar,
+      location: val.location || null,
+      media_urls: val.mediaUrls,
+      consent_publish: val.consentPublish,
+      consent_edit: val.consentEdit,
+      status: "pending",
+      submitter_hash: ipHash,
+    };
   }
 
   const admin = getAdminSupabase();
@@ -77,27 +138,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Batas kiriman harian tercapai. Kalau ini keliru, hubungi redaksi lewat halaman tentang.",
+          "Batas kiriman harian tercapai. Kalau ini keliru, hubungi redaksi lewat halaman kontak.",
       },
       { status: 429, headers: { "Retry-After": "3600" } },
     );
   }
 
-  const values = parsed.data;
-
-  const { error } = await admin.from("contributions").insert({
-    contributor_name: values.contributorName,
-    contributor_contact: values.contributorContact || null,
-    title: values.title,
-    content: values.content,
-    pillar: values.pillar,
-    location: values.location || null,
-    media_urls: values.mediaUrls,
-    consent_publish: values.consentPublish,
-    consent_edit: values.consentEdit,
-    status: "pending",
-    submitter_hash: ipHash,
-  });
+  const { error } = await admin.from("contributions").insert(insertData);
 
   if (error) {
     return NextResponse.json(

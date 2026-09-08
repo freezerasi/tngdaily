@@ -84,21 +84,35 @@ function PartnerRail({ stories }: { stories: PartnerStory[] }) {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="mb-3 flex flex-wrap items-end gap-x-3 gap-y-1">
-        <span className="flex items-center gap-2">
-          <ScribbleBracket className="h-6 w-2.5 text-tape" side="left" />
-          <h2 className="tng-display text-[1.25rem] leading-none sm:text-[1.5rem]">
-            PARTNER STORIES
-          </h2>
-        </span>
+      <header className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Link
+            href="/partner"
+            className="group inline-flex items-center gap-2 transition-colors hover:text-lime"
+            title="Buka arsip Partner Stories"
+          >
+            <ScribbleBracket className="h-6 w-2.5 text-tape" side="left" />
+            <h2 className="tng-display text-[1.25rem] leading-none sm:text-[1.5rem] group-hover:underline underline-offset-4 decoration-tape">
+              PARTNER STORIES
+            </h2>
+            <ScribbleArrow className="h-3.5 text-tape transition-transform duration-200 group-hover:translate-x-1 group-hover:text-lime" />
+          </Link>
 
-        <span className="inline-flex items-center border border-tape/70 px-1.5 py-0.5 font-display text-[0.5625rem] font-extrabold uppercase tracking-[0.14em] text-tape">
-          BERSPONSOR
-        </span>
+          <span className="inline-flex items-center border border-tape/70 px-1.5 py-0.5 font-display text-[0.5625rem] font-extrabold uppercase tracking-[0.14em] text-tape">
+            BERSPONSOR
+          </span>
+        </div>
 
-        <p className="w-full text-[0.8125rem] leading-snug text-muted sm:w-auto sm:flex-1">
-          Cerita kerja sama dari brand, UMKM, event, dan pelaku lokal. Ditandai
-          jelas, dan tidak masuk pilihan redaksi.
+        <Link
+          href="/partner"
+          className="group inline-flex items-center gap-1.5 font-display text-[0.6875rem] font-extrabold uppercase tracking-wider text-tape transition-colors hover:text-lime"
+        >
+          Lihat Semua Arsip
+          <span className="transition-transform duration-200 group-hover:translate-x-0.5">&rarr;</span>
+        </Link>
+
+        <p className="w-full text-[0.8125rem] leading-snug text-muted">
+          Cerita kerja sama dari brand, UMKM, event, dan pelaku lokal.
         </p>
       </header>
 

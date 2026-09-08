@@ -8,14 +8,14 @@ import {
   Menu,
   Megaphone,
   Sparkles,
+  X,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 /**
- * Bottom navigation, mobile only. Sits in the thumb zone and re-signs the
- * current corridor with a lime tick above the active item, not colour alone.
- * On desktop the top bar carries navigation instead.
+ * Bottom navigation, mobile only. Sits in the thumb zone.
+ * When on /menu, the Menu button transforms into a close button that returns to Beranda (/).
  */
 const ITEMS = [
   { href: "/", label: "Home", icon: House, match: (p: string) => p === "/" },
@@ -41,12 +41,22 @@ const ITEMS = [
     href: "/menu",
     label: "Menu",
     icon: Menu,
-    match: (p: string) => p.startsWith("/menu") || p.startsWith("/tentang"),
+    match: (p: string) =>
+      p.startsWith("/menu") ||
+      p.startsWith("/tentang") ||
+      p.startsWith("/redaksi") ||
+      p.startsWith("/kontak") ||
+      p.startsWith("/kode-etik") ||
+      p.startsWith("/pedoman-redaksi") ||
+      p.startsWith("/disclaimer") ||
+      p.startsWith("/kebijakan-privasi") ||
+      p.startsWith("/syarat-ketentuan"),
   },
 ] as const;
 
 export function BottomNav() {
   const pathname = usePathname();
+  const isMenuPage = pathname === "/menu" || pathname.startsWith("/menu");
 
   return (
     <nav
@@ -59,12 +69,17 @@ export function BottomNav() {
     >
       <ul className="mx-auto grid max-w-lg grid-cols-5">
         {ITEMS.map((item) => {
+          const isMenuItem = item.href === "/menu";
           const isActive = item.match(pathname);
-          const Icon = item.icon;
+          // If on /menu, clicking Menu closes it and returns to homepage (/)
+          const targetHref = isMenuItem && isMenuPage ? "/" : item.href;
+          const Icon = isMenuItem && isMenuPage ? X : item.icon;
+          const label = isMenuItem && isMenuPage ? "Tutup" : item.label;
+
           return (
             <li key={item.href} className="relative">
               <Link
-                href={item.href}
+                href={targetHref}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1",
@@ -80,7 +95,7 @@ export function BottomNav() {
                 />
                 <Icon aria-hidden="true" className="size-5" strokeWidth={2.4} />
                 <span className="tng-label text-[0.5625rem] leading-none">
-                  {item.label}
+                  {label}
                 </span>
               </Link>
             </li>

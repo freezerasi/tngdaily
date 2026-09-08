@@ -9,6 +9,8 @@ import {
   ScribbleRule,
 } from "@/components/branding/scribble";
 import { PartnerCard } from "@/components/editorial/partner-card";
+import { ArticleShareButtons } from "@/components/public/article-share-buttons";
+import { ArticleCommentSection } from "@/components/public/article-comment-section";
 import { MediaDisclosure } from "@/components/shared/media-provenance";
 import { Wall } from "@/components/shared/banner-panel";
 import { renderMarkdown } from "@/lib/content";
@@ -51,7 +53,7 @@ export default async function PartnerStoryPage({ params }: PageProps) {
   if (!story) notFound();
 
   const all = await getPartnerStories();
-  const others = all.filter((item) => item.slug !== story.slug).slice(0, 2);
+  const others = all.filter((item) => item.slug !== story.slug).slice(0, 6);
   const html = renderMarkdown(story.bodyMarkdown);
 
   return (
@@ -94,12 +96,21 @@ export default async function PartnerStoryPage({ params }: PageProps) {
             {story.dek}
           </p>
 
-          <p className="mt-4 border-t border-line pt-2.5 text-[0.75rem] text-muted">
-            Dipublikasikan{" "}
-            <time dateTime={story.publishedAt}>
-              {formatDateLong(story.publishedAt)}
-            </time>
-          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line pt-2.5 text-[0.75rem] text-muted">
+            <span className="flex items-center gap-1.5">
+              <span className="font-display text-[0.625rem] font-bold uppercase tracking-wider text-muted">
+                Penulis:
+              </span>
+              <span className="font-semibold text-foreground">Redaksi TNG Daily</span>
+            </span>
+            <span aria-hidden="true" className="text-line">&bull;</span>
+            <span>
+              Dipublikasikan{" "}
+              <time dateTime={story.publishedAt}>
+                {formatDateLong(story.publishedAt)}
+              </time>
+            </span>
+          </div>
         </header>
 
         {story.coverImageUrl ? (
@@ -138,34 +149,60 @@ export default async function PartnerStoryPage({ params }: PageProps) {
             tidak memiliki akses ke rubrik Vibes, Suara, Hustle, atau Story.
           </p>
           <Link
-            href="/tentang"
+            href="/tentang-kami"
             className="group mt-3 inline-flex items-center gap-1.5 font-display text-[0.625rem] font-extrabold uppercase tracking-[0.1em] text-ink"
           >
             Cara kami kerja
             <ScribbleArrow className="h-2.5 transition-transform duration-200 group-hover:translate-x-1" />
           </Link>
         </aside>
+
+        {/* Share Buttons */}
+        <ArticleShareButtons
+          title={story.title}
+          url={`/partner/${story.slug}`}
+        />
+
+        {/* Comment Section */}
+        <ArticleCommentSection
+          articleSlug={story.slug}
+          articleTitle={story.title}
+        />
       </article>
 
       {others.length > 0 ? (
         <section
           aria-labelledby="other-partner-heading"
-          className="mx-auto mt-8 max-w-5xl px-3 sm:px-4"
+          className="mx-auto mt-12 max-w-5xl px-3 sm:px-4"
         >
-          <div className="mb-3 flex items-center gap-2">
-            <ScribbleBracket className="h-5 w-2 text-tape" side="left" />
-            <h2
-              id="other-partner-heading"
-              className="tng-display text-[1.125rem] leading-none sm:text-[1.25rem]"
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ScribbleBracket className="h-5 w-2 text-tape" side="left" />
+              <h2
+                id="other-partner-heading"
+                className="tng-display text-[1.125rem] leading-none sm:text-[1.35rem]"
+              >
+                PARTNER STORY LAINNYA
+              </h2>
+            </div>
+
+            <Link
+              href="/partner"
+              className="group inline-flex items-center gap-1 font-display text-[0.6875rem] font-extrabold uppercase tracking-wider text-tape transition-colors hover:text-lime"
             >
-              PARTNER STORY LAINNYA
-            </h2>
+              Lihat Semua Arsip &rarr;
+            </Link>
           </div>
 
-          <ul className="grid gap-3 sm:grid-cols-2">
+          <ul className="grid gap-4 sm:grid-cols-2 items-stretch">
             {others.map((item, index) => (
               <li key={item.id} className="flex">
-                <PartnerCard story={item} index={index} className="w-full" />
+                <PartnerCard
+                  story={item}
+                  index={index}
+                  variant="semi-grid"
+                  className="w-full"
+                />
               </li>
             ))}
           </ul>

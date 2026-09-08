@@ -1,6 +1,5 @@
 import "server-only";
 
-import { allowsMockContent } from "@/lib/content-environment";
 import { normaliseProvenance } from "@/lib/content-environment";
 import type { MediaProvenance, Pillar } from "@/types/domain";
 
@@ -206,10 +205,8 @@ export async function getPartnerStories(): Promise<PartnerStory[]> {
   /*
    * No partner table exists yet. When one does, it is queried here and must
    * carry its own `is_mock` and consent fields. Until then the only source is
-   * the development samples, which production drops.
+   * the development samples, which are shown when partner stories are enabled.
    */
-  if (!allowsMockContent()) return [];
-
   return DEV_SAMPLE;
 }
 

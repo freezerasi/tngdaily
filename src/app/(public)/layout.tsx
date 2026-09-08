@@ -2,7 +2,7 @@ import { BottomNav } from "@/components/public/bottom-nav";
 import { TopBar } from "@/components/public/top-bar";
 import { PulseBar } from "@/components/layout/pulse-bar";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { getCityWeather, getNewsroomPulse } from "@/lib/data/pulse";
+import { getCityWeather } from "@/lib/data/pulse";
 
 /**
  * Public shell.
@@ -16,15 +16,11 @@ export default async function PublicLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Both are cached server reads; neither blocks on the other.
-  const [weather, newsroom] = await Promise.all([
-    getCityWeather(),
-    getNewsroomPulse(),
-  ]);
+  const weather = await getCityWeather();
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <PulseBar weather={weather} newsroom={newsroom} />
+      <PulseBar weather={weather} />
       <TopBar />
       <main id="konten" className="flex-1 pb-20 lg:pb-8">
         {children}

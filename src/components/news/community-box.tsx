@@ -56,7 +56,7 @@ export function CommunityBox({ className }: { className?: string }) {
 
       <div className="relative grid gap-2">
         <Link
-          href="/kontribusi"
+          href="/kirim-berita"
           className={cn(
             "group inline-flex h-11 items-center justify-between gap-2 border-2 border-keyline bg-lime px-3",
             "font-display text-[0.6875rem] font-extrabold uppercase tracking-[0.1em] text-ink",
@@ -64,22 +64,24 @@ export function CommunityBox({ className }: { className?: string }) {
             "hover:bg-lime-bright active:translate-x-[3px] active:translate-y-[3px] active:shadow-none",
           )}
         >
-          KIRIM CERITA
+          KIRIM BERITA
           <ScribbleArrow className="h-3 transition-transform duration-200 group-hover:translate-x-1" />
         </Link>
 
         <div className="grid grid-cols-2 gap-2">
-          <Link
-            href="/tentang#kanal"
+          <a
+            href="https://wa.me/6282114812842"
+            target="_blank"
+            rel="noreferrer"
             className="inline-flex h-11 items-center justify-center border-2 border-line bg-surface font-display text-[0.625rem] font-extrabold uppercase tracking-[0.08em] text-muted transition-all duration-200 hover:border-keyline hover:text-foreground"
           >
             WHATSAPP
-          </Link>
+          </a>
           <Link
-            href="/tentang#kanal"
+            href="/kontak"
             className="inline-flex h-11 items-center justify-center border-2 border-line bg-surface font-display text-[0.625rem] font-extrabold uppercase tracking-[0.08em] text-muted transition-all duration-200 hover:border-keyline hover:text-foreground"
           >
-            TELEGRAM
+            KONTAK
           </Link>
         </div>
 

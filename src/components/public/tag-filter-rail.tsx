@@ -5,8 +5,8 @@ import { cn } from "@/lib/utils";
 import type { Pillar } from "@/types/domain";
 
 /**
- * Tag filter. Typed URL search params rather than client state, so a filtered
- * pillar view is shareable and still server-rendered.
+ * Tag filter. Path routes rather than query strings keep canonical pillar
+ * pages cacheable while preserving shareable server-rendered filtered views.
  */
 export function TagFilterRail({
   pillar,
@@ -25,7 +25,7 @@ export function TagFilterRail({
         return (
           <Link
             key={tag}
-            href={isActive ? `/${pillar}` : `/${pillar}?tag=${encodeURIComponent(tag)}`}
+            href={isActive ? `/${pillar}` : `/${pillar}/tag/${encodeURIComponent(tag)}`}
             aria-current={isActive ? "true" : undefined}
             className={cn(
               "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[2px] border-2 px-2.5",

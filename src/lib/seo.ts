@@ -241,6 +241,63 @@ export function organizationJsonLd(): Record<string, unknown> {
   };
 }
 
+export function newsMediaOrganizationJsonLd(): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "NewsMediaOrganization",
+    name: "TNG Daily",
+    url: siteUrl,
+    email: "redaksi@tngdaily.com",
+    telephone: "+62-821-1481-2842",
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "Jl. Flamboyan Raya No. 4",
+      addressLocality: "Karawaci",
+      addressRegion: "Tangerang",
+      addressCountry: "ID",
+    },
+    contactPoint: {
+      "@type": "ContactPoint",
+      contactType: "editorial",
+      email: "redaksi@tngdaily.com",
+      telephone: "+62-821-1481-2842",
+      areaServed: "ID",
+      availableLanguage: ["Indonesian"],
+    },
+    ethicsPolicy: absoluteUrl("/kode-etik"),
+    correctionsPolicy: absoluteUrl("/pedoman-redaksi"),
+    privacyPolicy: absoluteUrl("/kebijakan-privasi"),
+    publishingPrinciples: absoluteUrl("/pedoman-redaksi"),
+  };
+}
+
+export function redaksiTeamJsonLd(): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Person",
+        name: "Santika Reja",
+        jobTitle: "Pemimpin Redaksi",
+        worksFor: { "@type": "NewsMediaOrganization", name: "TNG Daily" },
+        email: "redaksi@tngdaily.com",
+      },
+      {
+        "@type": "Person",
+        name: "Titis Yunita",
+        jobTitle: "Redaktur Pelaksana",
+        worksFor: { "@type": "NewsMediaOrganization", name: "TNG Daily" },
+      },
+      {
+        "@type": "Person",
+        name: "Maulidiani Nurani",
+        jobTitle: "Redaktur Komunitas",
+        worksFor: { "@type": "NewsMediaOrganization", name: "TNG Daily" },
+      },
+    ],
+  };
+}
+
 export function websiteJsonLd(): Record<string, unknown> {
   return {
     "@context": "https://schema.org",
@@ -270,20 +327,26 @@ export function homePageJsonLd(
 export function pillarPageJsonLd({
   pillar,
   articles = [],
+  tag,
 }: {
   pillar: Pillar;
   articles?: readonly ArticleSummary[];
   tag?: string;
 }): Record<string, unknown> {
   const meta = PILLAR_META[pillar];
-  const path = `/${pillar}`;
-  const title = `${meta.wordmark}: ${meta.tagline}`;
+  const path = tag ? `/${pillar}/tag/${encodeURIComponent(tag)}` : `/${pillar}`;
+  const title = tag
+    ? `#${tag} di ${meta.label}`
+    : `${meta.wordmark}: ${meta.tagline}`;
+  const description = tag
+    ? `Kumpulan artikel TNG Daily bertag #${tag} dalam rubrik ${meta.label}.`
+    : meta.description;
 
   return jsonLdGraph([
     collectionPageJsonLd({
       path,
       title,
-      description: meta.description,
+      description,
       items: articles,
       pageType: "CollectionPage",
     }),
@@ -291,6 +354,7 @@ export function pillarPageJsonLd({
       pageBreadcrumbJsonLd([
         { name: SITE_NAME, path: "/" },
         { name: meta.label, path: `/${pillar}` },
+        ...(tag ? [{ name: `#${tag}`, path }] : []),
       ]),
     ),
   ]);

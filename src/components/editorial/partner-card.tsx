@@ -27,16 +27,115 @@ import { cn } from "@/lib/utils";
 export function PartnerCard({
   story,
   index = 0,
+  variant = "portrait",
   className,
 }: {
   story: PartnerStory;
   /** Position in the rail, printed as a stub number. */
   index?: number;
+  /** 'portrait' for vertical rail, 'semi-grid' for compact landscape grid. */
+  variant?: "portrait" | "semi-grid";
   className?: string;
 }) {
   const linkProps = story.isExternal
     ? { target: "_blank", rel: "sponsored nofollow noopener" }
     : { rel: "sponsored" };
+
+  if (variant === "semi-grid") {
+    return (
+      <article
+        className={cn(
+          "group relative flex w-full overflow-hidden border-2 border-dashed border-tape bg-bone text-ink shadow-[var(--shadow-hard-sm)]",
+          "transition-all duration-200 ease-out hover:border-solid hover:shadow-[var(--shadow-hard)]",
+          className,
+        )}
+      >
+        {/* Ticket stub: perforated spine carrying the disclosure vertically */}
+        <div className="relative flex w-8 sm:w-9 shrink-0 flex-col items-center justify-between border-r-2 border-dashed border-ink/30 bg-ink py-2.5 sm:py-3.5">
+          <span className="font-display text-[0.6875rem] font-black tabular-nums leading-none text-bone/70">
+            {String(index + 1).padStart(2, "0")}
+          </span>
+
+          <span
+            className="whitespace-nowrap font-display text-[0.5rem] font-extrabold uppercase tracking-[0.2em] text-lime"
+            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            ADVERTORIAL &middot; PARTNER
+          </span>
+
+          <ScribbleBracket className="h-3.5 w-1.5 text-bone/50" side="left" />
+        </div>
+
+        <Link
+          {...linkProps}
+          href={story.href}
+          className="flex min-w-0 flex-1 flex-col sm:flex-row"
+        >
+          {/* Landscape Thumbnail: 16:10 on mobile, responsive fixed width on sm+ */}
+          {story.coverImageUrl ? (
+            <div className="relative aspect-[16/10] w-full shrink-0 overflow-hidden border-b-2 border-dashed border-ink/20 sm:aspect-auto sm:w-48 md:w-52 lg:w-56 sm:border-b-0 sm:border-r-2">
+              <Image
+                src={story.coverImageUrl}
+                alt={story.coverImageAlt ?? story.title}
+                fill
+                sizes="(min-width: 1024px) 240px, (min-width: 640px) 210px, 100vw"
+                className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.04]"
+              />
+              {story.isMock ? (
+                <span className="absolute right-2 top-2 inline-flex items-center border border-ink bg-bone/95 px-1 py-0.5 font-display text-[0.5rem] font-extrabold uppercase tracking-wider text-ink">
+                  CONTOH
+                </span>
+              ) : null}
+
+              <span className="absolute bottom-2 left-2 inline-flex items-center border-2 border-ink bg-ink px-1.5 py-0.5 font-display text-[0.5625rem] font-extrabold uppercase tracking-[0.14em] text-lime">
+                {story.category}
+              </span>
+            </div>
+          ) : (
+            <div
+              aria-hidden="true"
+              className="aspect-[16/10] w-full shrink-0 border-b-2 border-dashed border-ink/20 sm:aspect-auto sm:w-48 md:w-52 lg:w-56 sm:border-b-0 sm:border-r-2"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(45deg, rgba(13,15,12,0.14) 0 3px, transparent 3px 11px)",
+              }}
+            />
+          )}
+
+          {/* Body Content */}
+          <div className="flex flex-1 flex-col justify-between p-3.5 sm:p-4">
+            <div>
+              <span className="font-display text-[0.625rem] font-extrabold uppercase leading-tight tracking-[0.08em] text-ink/75">
+                {story.partnerName} &times; TNG Daily
+              </span>
+
+              <h3 className="tng-display-tight mt-1 text-[1.0625rem] font-bold leading-snug text-ink transition-colors group-hover:text-ink sm:text-[1.125rem]">
+                {story.title}
+              </h3>
+
+              <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-ink/75 sm:text-[0.8125rem]">
+                {story.dek}
+              </p>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between border-t border-dashed border-ink/25 pt-2">
+              <time
+                dateTime={story.publishedAt}
+                className="text-[0.6875rem] tabular-nums text-ink/55"
+              >
+                {formatDateShort(story.publishedAt)}
+              </time>
+
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap font-display text-[0.625rem] font-extrabold uppercase tracking-[0.1em] text-ink">
+                BACA CERITA
+                <ScribbleArrow className="h-2.5 transition-transform duration-200 group-hover:translate-x-1" />
+              </span>
+            </div>
+          </div>
+        </Link>
+      </article>
+    );
+  }
 
   return (
     <article

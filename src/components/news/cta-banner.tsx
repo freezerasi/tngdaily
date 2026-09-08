@@ -40,15 +40,15 @@ export function CtaBanner({ className }: { className?: string }) {
 
         <div className="flex flex-wrap items-center gap-2.5">
           <Link
-            href="/kontribusi"
+            href="/kirim-berita"
             className="group inline-flex h-12 items-center gap-2 border-2 border-keyline bg-ink px-5 font-display text-[0.75rem] font-extrabold uppercase tracking-[0.12em] text-foreground shadow-[3px_3px_0px_0px_rgba(0,0,0,0.35)] transition-all duration-200 ease-out hover:bg-wall-deep active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
           >
-            KIRIM CERITA
+            KIRIM BERITA
             <ScribbleArrow className="h-3 text-lime transition-transform duration-200 group-hover:translate-x-1" />
           </Link>
 
           <Link
-            href="/kontribusi#tip"
+            href="/kirim-berita"
             className="group inline-flex h-12 items-center gap-2 border-2 border-keyline bg-transparent px-5 font-display text-[0.75rem] font-extrabold uppercase tracking-[0.12em] text-ink transition-all duration-200 ease-out hover:bg-ink/10 active:translate-x-[2px] active:translate-y-[2px]"
           >
             KIRIM TIP

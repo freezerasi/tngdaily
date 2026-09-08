@@ -25,6 +25,7 @@ export default async function LoginPage({
     rawNext && /^\/admin(?:\/[\w\-/[\]]*)?(?:\?[\w=&%.-]*)?$/.test(rawNext)
       ? rawNext
       : "/admin";
+  const mfaRequired = params.mfa === "required";
 
   const configured = isSupabaseConfigured();
 
@@ -45,6 +46,16 @@ export default async function LoginPage({
               Akun dibuat oleh admin lewat Supabase Auth. Tidak ada pendaftaran
               publik.
             </p>
+            {mfaRequired ? (
+              <p
+                role="note"
+                className="mt-2 border-l-2 border-lime pl-2.5 text-[0.8125rem] leading-relaxed text-muted"
+              >
+                Sesi kamu masih di langkah pertama. Verifikasi dua langkah
+                wajib untuk akun ini — masukkan password, lalu kode
+                authenticator.
+              </p>
+            ) : null}
             <LoginForm next={next} />
           </BannerPanel>
         ) : (

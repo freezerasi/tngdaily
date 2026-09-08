@@ -70,22 +70,46 @@ const GROUPS = [
     heading: "Ikut terlibat",
     items: [
       {
-        href: "/kontribusi",
-        label: "Kirim cerita",
+        href: "/kirim-berita",
+        label: "Kirim berita",
         icon: PenLine,
-        note: "Masuk moderasi editor",
+        note: "Panduan dan formulir kontributor warga",
       },
       {
-        href: "/tentang",
+        href: "/tentang-kami",
         label: "Tentang TNG Daily",
         icon: Info,
-        note: "Cara kami kerja, koreksi, AI",
+        note: "Media digital anak muda Tangerang",
+      },
+      {
+        href: "/redaksi",
+        label: "Susunan Redaksi",
+        icon: ShieldCheck,
+        note: "Pemimpin Redaksi, Redaktur Pelaksana, Redaktur Komunitas",
+      },
+      {
+        href: "/kontak",
+        label: "Kontak Redaksi",
+        icon: Megaphone,
+        note: "Kanal resmi dan kantor Karawaci",
       },
     ],
   },
   {
-    heading: "Redaksi",
+    heading: "Standar & Legal",
     items: [
+      {
+        href: "/kode-etik",
+        label: "Kode Etik",
+        icon: ShieldCheck,
+        note: "Standar jurnalistik dan aturan main",
+      },
+      {
+        href: "/kebijakan-privasi",
+        label: "Kebijakan Privasi",
+        icon: ShieldCheck,
+        note: "Pelindungan data pembaca dan kontributor",
+      },
       {
         href: "/admin",
         label: "Masuk dashboard",
@@ -98,7 +122,7 @@ const GROUPS = [
 
 export default function MenuPage() {
   return (
-    <Wall className="px-2 py-4">
+    <Wall rail={false} className="mx-auto max-w-2xl px-3 py-6 sm:px-4 break-words">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -113,18 +137,34 @@ export default function MenuPage() {
         }}
       />
 
-      <BannerPanel ink="wall" lift="md" className="p-4 sm:p-5">
-        <TapePatch tone="bone" tilt="left">
-          Menu
-        </TapePatch>
-        <h1 className="tng-display mt-3 text-[2rem] leading-[0.92] sm:text-[2.75rem]">
-          Semua halaman
-        </h1>
+      <BannerPanel ink="wall" lift="md" className="p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <TapePatch tone="bone" tilt="left">
+              Menu Navigasi
+            </TapePatch>
+            <h1 className="tng-display mt-3 text-[2rem] leading-[0.98] sm:text-[2.75rem] text-foreground">
+              Semua halaman
+            </h1>
+            <p className="mt-2 text-xs text-muted">
+              Tekan tombol Menu di bawah atau ikon silang untuk kembali ke Beranda.
+            </p>
+          </div>
+          <Link
+            href="/"
+            aria-label="Tutup menu dan kembali ke beranda"
+            className="inline-flex size-9 items-center justify-center border-2 border-line bg-surface text-muted transition-colors hover:border-lime hover:text-foreground shrink-0"
+          >
+            <span className="font-mono text-sm font-bold">&times;</span>
+          </Link>
+        </div>
       </BannerPanel>
 
       {GROUPS.map((group) => (
-        <section key={group.heading} className="mt-3">
-          <h2 className="tng-label px-1 pb-2 text-muted">{group.heading}</h2>
+        <section key={group.heading} className="mt-4">
+          <h2 className="tng-label px-2 pb-2 text-muted uppercase tracking-wider text-[0.75rem]">
+            {group.heading}
+          </h2>
           <ul className="grid gap-2">
             {group.items.map((item) => {
               const Icon = item.icon;

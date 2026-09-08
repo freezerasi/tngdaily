@@ -25,24 +25,26 @@ import type { ArticleSummary } from "@/lib/data/types";
  * surface, so the plate, the tabs, and every badge re-sign together.
  */
 
-export type PillarSearchParams = Record<string, string | string[] | undefined>;
-
-function readTag(searchParams: PillarSearchParams): string | undefined {
-  const raw = searchParams.tag;
-  const value = Array.isArray(raw) ? raw[0] : raw;
+export function sanitizePillarTag(value: string | undefined): string | undefined {
   if (!value) return undefined;
-  const clean = value.trim().toLowerCase().slice(0, 32);
+  let decoded = value;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+  const clean = decoded.trim().toLowerCase().slice(0, 32);
   return /^[a-z0-9 -]+$/.test(clean) ? clean : undefined;
 }
 
 export async function PillarPageBody({
   pillar,
-  searchParams,
+  tag: rawTag,
 }: {
   pillar: Pillar;
-  searchParams: PillarSearchParams;
+  tag?: string;
 }) {
-  const tag = readTag(searchParams);
+  const tag = sanitizePillarTag(rawTag);
 
   const [articlesResult, listingsResult] = await Promise.all([
     getPublishedArticles({ pillar, limit: 15, ...(tag ? { tag } : {}) }),

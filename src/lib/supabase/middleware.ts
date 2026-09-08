@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Refreshes the Supabase auth session on every request and returns both the
+ * Refreshes the Supabase auth session for protected routes and returns both the
  * mutated response (carrying refreshed cookies) and the resolved user id.
  *
  * Runs in the Edge middleware, so it reads `process.env` directly rather than
@@ -11,6 +11,8 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function updateSession(request: NextRequest): Promise<{
   response: NextResponse;
   userId: string | null;
+  aal: string | null;
+  mfaEnrolled: boolean;
   configured: boolean;
 }> {
   let response = NextResponse.next({ request });
@@ -19,7 +21,7 @@ export async function updateSession(request: NextRequest): Promise<{
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
-    return { response, userId: null, configured: false };
+    return { response, userId: null, aal: null, mfaEnrolled: false, configured: false };
   }
 
   const supabase = createServerClient(url, anonKey, {
@@ -39,9 +41,20 @@ export async function updateSession(request: NextRequest): Promise<{
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data } = await supabase.auth.getClaims();
 
-  return { response, userId: user?.id ?? null, configured: true };
+  // Supabase JWTs carry `aal` but no "user has verified factors" claim. The
+  // assurance-level helper reads it from the session JWT and user factors
+  // stored in the cookie-bound client, without a network round-trip.
+  const { data: aalData } =
+    await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+  return {
+    response,
+    userId: data?.claims.sub ?? null,
+    aal: (data?.claims.aal as string | undefined) ?? null,
+    // nextLevel is aal2 only when the account has at least one verified factor.
+    mfaEnrolled: aalData?.nextLevel === "aal2",
+    configured: true,
+  };
 }

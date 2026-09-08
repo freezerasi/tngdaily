@@ -46,7 +46,7 @@ export interface OnThisDayResult {
   attribution: string | null;
 }
 
-const WIKIMEDIA_TIMEOUT_MS = 1_200;
+const WIKIMEDIA_TIMEOUT_MS = 4_000;
 const WIKIMEDIA_CACHE_SECONDS = 21_600;
 
 /*
@@ -161,7 +161,8 @@ const getCachedOnThisDayEvents = unstable_cache(
           cache: "no-store",
           headers: {
             Accept: "application/json",
-            // Wikimedia asks for an identifying agent with a contact route.
+            "User-Agent":
+              "TNGDaily/1.0 (https://tngdaily.com; editorial archive feature)",
             "Api-User-Agent":
               "TNGDaily/1.0 (https://tngdaily.com; editorial archive feature)",
           },

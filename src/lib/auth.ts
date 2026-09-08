@@ -16,7 +16,8 @@ export interface AuthContext {
 export type AuthState =
   | { kind: "unconfigured" }
   | { kind: "anonymous" }
-  | { kind: "authenticated"; context: AuthContext };
+  | { kind: "authenticated"; context: AuthContext }
+  | { kind: "mfaRequired"; context: AuthContext };
 
 /**
  * Resolves the caller's session and profile row. Returns a discriminated state
@@ -43,25 +44,41 @@ export async function getAuthState(): Promise<AuthState> {
 
   const role = highestUserRole((roleKeys ?? []) as unknown[]);
 
-  return {
-    kind: "authenticated",
-    context: {
-      supabase,
-      user,
-      profile: {
-        id: user.id,
-        username: data?.username ?? null,
-        displayName:
-          data?.display_name ?? user.email?.split("@")[0] ?? null,
-        role,
-      },
+  const context: AuthContext = {
+    supabase,
+    user,
+    profile: {
+      id: user.id,
+      username: data?.username ?? null,
+      displayName:
+        data?.display_name ?? user.email?.split("@")[0] ?? null,
+      role,
     },
   };
+
+  // MFA enforcement (opt-in per user): a session at AAL1 whose user has at
+  // least one verified MFA factor is not yet trusted for the CMS. The client
+  // SDK computes the assurance level from the session JWT + user factors, so
+  // this adds no extra network round-trip.
+  const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  const hasVerifiedFactor = (user.factors ?? []).some(
+    (factor) => factor.status === "verified",
+  );
+  if (
+    hasVerifiedFactor &&
+    aalData &&
+    (aalData.currentLevel ?? "aal1") !== "aal2"
+  ) {
+    return { kind: "mfaRequired", context };
+  }
+
+  return { kind: "authenticated", context };
 }
 
 /**
- * Page-level guard. Redirects unauthenticated callers to the login screen and
- * under-privileged callers to the access-denied screen.
+ * Page-level guard. Redirects unauthenticated callers to the login screen,
+ * MFA-pending sessions to the MFA challenge step, and under-privileged
+ * callers to the access-denied screen.
  */
 export async function requireRole(
   minimum: UserRole,
@@ -74,6 +91,11 @@ export async function requireRole(
     redirect(`/admin/login${next}`);
   }
 
+  if (state.kind === "mfaRequired") {
+    const next = options.returnTo ? `&next=${encodeURIComponent(options.returnTo)}` : "";
+    redirect(`/admin/login?mfa=required${next}`);
+  }
+
   if (!roleAtLeast(state.context.profile.role, minimum)) {
     redirect(`/admin/akses-ditolak?butuh=${minimum}`);
   }
@@ -84,6 +106,8 @@ export async function requireRole(
 /** Route-handler guard. Returns null instead of redirecting. */
 export async function getApiAuth(minimum: UserRole): Promise<AuthContext | null> {
   const state = await getAuthState();
+  // Also rejects `mfaRequired`: an AAL1 session with verified factors must
+  // not reach any data until the second factor is confirmed.
   if (state.kind !== "authenticated") return null;
   if (!roleAtLeast(state.context.profile.role, minimum)) return null;
   return state.context;

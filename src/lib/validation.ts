@@ -70,6 +70,59 @@ export const contributionFormSchema = z.object({
 export type ContributionFormValues = z.input<typeof contributionFormSchema>;
 export type ContributionPayload = z.output<typeof contributionFormSchema>;
 
+export const kirimBeritaFormSchema = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .min(2, "Nama lengkap minimal 2 karakter.")
+    .max(80, "Nama lengkap maksimal 80 karakter."),
+  displayName: z
+    .string()
+    .trim()
+    .min(2, "Nama yang tampil di artikel minimal 2 karakter.")
+    .max(80, "Nama tampil maksimal 80 karakter."),
+  email: z
+    .string()
+    .trim()
+    .email("Format email tidak valid.")
+    .max(120, "Email maksimal 120 karakter."),
+  whatsapp: z
+    .string()
+    .trim()
+    .min(8, "Nomor WhatsApp minimal 8 digit.")
+    .max(20, "Nomor WhatsApp maksimal 20 karakter.")
+    .regex(/^[0-9+\s-]+$/, "Nomor WhatsApp hanya boleh angka, tanda +, spasi, atau tanda hubung."),
+  district: z
+    .string()
+    .trim()
+    .min(2, "Kecamatan / area wajib diisi.")
+    .max(120, "Kecamatan / area maksimal 120 karakter."),
+  title: z
+    .string()
+    .trim()
+    .min(5, "Judul usulan minimal 5 karakter.")
+    .max(160, "Judul usulan maksimal 160 karakter."),
+  content: z
+    .string()
+    .trim()
+    .min(60, "Isi naskah minimal 60 karakter.")
+    .max(8000, "Isi naskah maksimal 8000 karakter."),
+  mediaUrl: z
+    .string()
+    .trim()
+    .url("URL tautan foto/video tidak valid.")
+    .optional()
+    .or(z.literal("")),
+  consentOriginality: z.literal(true, {
+    message: "Kamu wajib menyatakan naskah asli dan menyetujui Kode Etik serta Syarat dan Ketentuan.",
+  }),
+  consentPrivacy: z.literal(true, {
+    message: "Kamu wajib menyetujui pemrosesan data sesuai Kebijakan Privasi.",
+  }),
+});
+export type KirimBeritaFormValues = z.input<typeof kirimBeritaFormSchema>;
+export type KirimBeritaPayload = z.output<typeof kirimBeritaFormSchema>;
+
 export const articleUpsertSchema = z.object({
   id: uuidSchema.optional(),
   title: z

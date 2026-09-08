@@ -46,7 +46,7 @@ export function FilterTabs({
 
           {showTrending ? (
             <Tab
-              href="/?urut=populer"
+              href="/populer"
               label="TRENDING"
               isActive={active === "trending"}
             />

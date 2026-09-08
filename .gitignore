@@ -20,6 +20,7 @@ next-env.d.ts
 # local secret store (AI dev adapter) — never commit
 .secrets/
 .local-secrets.json
+scripts/.mfa-enrollment-qr.svg
 
 # local agent/tooling artifacts
 .agents/

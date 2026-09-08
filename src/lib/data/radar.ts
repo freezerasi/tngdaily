@@ -87,7 +87,7 @@ export async function getRadarSlots(query: RadarQuery = {}): Promise<RadarSlot[]
       label: "Jalan dan transportasi",
       blurb: "Angkot, KRL, trotoar, dan rute harian",
       item: transport ? { kind: "article", article: transport } : null,
-      href: "/suara?tag=transportasi",
+      href: "/suara/tag/transportasi",
       emptyHint: "Belum ada liputan transportasi yang tayang.",
     },
     {
@@ -95,7 +95,7 @@ export async function getRadarSlots(query: RadarQuery = {}): Promise<RadarSlot[]
       label: "Makan dan nongkrong",
       blurb: "Tempat yang masih longgar dan harganya jujur",
       item: kuliner ? { kind: "article", article: kuliner } : null,
-      href: "/vibes?tag=kuliner",
+      href: "/vibes/tag/kuliner",
       emptyHint: "Belum ada liputan kuliner yang tayang.",
     },
     {

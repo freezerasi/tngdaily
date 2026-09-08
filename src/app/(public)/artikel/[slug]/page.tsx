@@ -5,7 +5,9 @@ import { notFound } from "next/navigation";
 import { ArrowUpRight, MessageCircle } from "lucide-react";
 
 import { ArticleReactionDock } from "@/components/public/article-reaction-dock";
-import { FeedRow } from "@/components/public/feed-card";
+import { ArticleShareButtons } from "@/components/public/article-share-buttons";
+import { ArticleCommentSection } from "@/components/public/article-comment-section";
+import { RelatedLandscapeCard } from "@/components/public/related-landscape-card";
 import { BannerPanel, Wall } from "@/components/shared/banner-panel";
 import { Hem, ReadCost } from "@/components/shared/banner-parts";
 import { MediaDisclosure, MediaStatusBadge } from "@/components/shared/media-provenance";
@@ -45,7 +47,7 @@ export default async function ArticlePage({ params }: PageProps) {
 
   const sessionId = await readSessionId();
   const [related, reactions] = await Promise.all([
-    getRelatedArticles(article, 4),
+    getRelatedArticles(article, 6),
     getSessionReactions(article.id, sessionId),
   ]);
 
@@ -124,12 +126,12 @@ export default async function ArticlePage({ params }: PageProps) {
                   text.muted,
                 )}
               >
-                {article.authorName ? (
-                  <div className="flex items-baseline gap-1.5">
-                    <dt className="tng-label text-[0.5625rem]">Penulis</dt>
-                    <dd className="font-semibold">{article.authorName}</dd>
-                  </div>
-                ) : null}
+                <div className="flex items-baseline gap-1.5">
+                  <dt className="tng-label text-[0.5625rem]">Penulis</dt>
+                  <dd className="font-semibold">
+                    {article.authorName?.trim() || "Redaksi TNG Daily"}
+                  </dd>
+                </div>
                 <div className="flex items-baseline gap-1.5">
                   <dt className="tng-label text-[0.5625rem]">Terbit</dt>
                   <dd>
@@ -198,7 +200,7 @@ export default async function ArticlePage({ params }: PageProps) {
                 {article.tags.map((tag) => (
                   <li key={tag}>
                     <Link
-                      href={`/${article.pillar}?tag=${encodeURIComponent(tag)}`}
+                      href={`/${article.pillar}/tag/${encodeURIComponent(tag)}`}
                       className="inline-flex h-8 items-center rounded-[2px] border-2 border-line bg-surface px-2.5 text-[0.75rem] font-semibold lowercase text-muted hover:border-keyline hover:text-foreground"
                     >
                       #{tag}
@@ -244,10 +246,18 @@ export default async function ArticlePage({ params }: PageProps) {
             </BannerPanel>
           </div>
         ) : null}
+
+        {/* Share buttons */}
+        <div className="px-2">
+          <ArticleShareButtons
+            title={article.title}
+            url={url}
+          />
+        </div>
       </article>
 
       {/* Channel + contribution CTAs, out of the reading column. */}
-      <section className="grid gap-2 px-2 pt-7 sm:grid-cols-2">
+      <section className="grid gap-2 px-2 pt-4 sm:grid-cols-2">
         <BannerPanel ink="deep" lift="sm" className="border-lime p-4">
           <TapePatch tone="lime" tilt="left">
             Ikuti
@@ -260,7 +270,7 @@ export default async function ArticlePage({ params }: PageProps) {
             ini akan mengarah ke halaman tentang.
           </p>
           <Button asChild variant="outline" size="sm" className="mt-3">
-            <Link href="/tentang#kanal">
+            <Link href="/tentang-kami#kanal">
               <MessageCircle aria-hidden="true" />
               Lihat kanal
             </Link>
@@ -279,20 +289,29 @@ export default async function ArticlePage({ params }: PageProps) {
             dan kamu bisa pakai nama pena.
           </p>
           <Button asChild variant="secondary" size="sm" className="mt-3">
-            <Link href="/kontribusi">Tulis kiriman</Link>
+            <Link href="/kirim-berita">Tulis kiriman</Link>
           </Button>
         </BannerPanel>
       </section>
 
+      {/* Comment Section */}
+      <div className="px-2">
+        <ArticleCommentSection
+          articleSlug={article.slug}
+          articleTitle={article.title}
+        />
+      </div>
+
+      {/* Related Articles — Landscape Cards with Thumbnails (up to 6) */}
       {related.length > 0 ? (
-        <section className="px-2 pt-7">
-          <div className="tng-section-head mb-2">
-            <h2 className="tng-display text-xl">Lanjut baca</h2>
+        <section className="px-2 pt-4">
+          <div className="tng-section-head mb-3">
+            <h2 className="tng-display text-xl sm:text-2xl">Lanjut baca</h2>
             <span aria-hidden="true" className="h-[2px] flex-1 bg-line" />
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 items-stretch">
             {related.map((item) => (
-              <FeedRow key={item.id} article={item} />
+              <RelatedLandscapeCard key={item.id} article={item} />
             ))}
           </div>
         </section>

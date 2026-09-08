@@ -8,6 +8,7 @@ import {
   ScribbleRule,
   ScribbleStar,
 } from "@/components/branding/scribble";
+import { TapePatch } from "@/components/shared/tape-patch";
 import { formatFeedTime } from "@/lib/dates";
 import type { RadarSlot } from "@/lib/data/radar";
 import { cn } from "@/lib/utils";
@@ -51,17 +52,17 @@ export function RadarModule({ slots }: { slots: RadarSlot[] }) {
       className="border-y-2 border-keyline bg-surface py-6 sm:py-8"
     >
       <div className="mx-auto max-w-7xl px-3 sm:px-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <div className="flex items-baseline gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <div className="flex items-center gap-3">
             <span
               id="radar-module-heading"
               className="font-display text-[1.5rem] font-black uppercase tracking-tight text-lime sm:text-[1.75rem]"
             >
               TNG RADAR
             </span>
-            <span className="font-display text-[0.875rem] font-bold uppercase tracking-widest text-foreground/80 sm:text-[1rem]">
+            <TapePatch tone="tape" tilt="left">
               60 DETIK DI TANGERANG
-            </span>
+            </TapePatch>
           </div>
 
           <span className="font-display text-[0.625rem] font-bold uppercase tracking-widest text-muted">
