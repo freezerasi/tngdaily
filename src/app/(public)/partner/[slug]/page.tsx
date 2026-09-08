@@ -10,7 +10,6 @@ import {
 } from "@/components/branding/scribble";
 import { PartnerCard } from "@/components/editorial/partner-card";
 import { ArticleShareButtons } from "@/components/public/article-share-buttons";
-import { ArticleCommentSection } from "@/components/public/article-comment-section";
 import { MediaDisclosure } from "@/components/shared/media-provenance";
 import { Wall } from "@/components/shared/banner-panel";
 import { renderMarkdown } from "@/lib/content";
@@ -161,12 +160,6 @@ export default async function PartnerStoryPage({ params }: PageProps) {
         <ArticleShareButtons
           title={story.title}
           url={`/partner/${story.slug}`}
-        />
-
-        {/* Comment Section */}
-        <ArticleCommentSection
-          articleSlug={story.slug}
-          articleTitle={story.title}
         />
       </article>
 

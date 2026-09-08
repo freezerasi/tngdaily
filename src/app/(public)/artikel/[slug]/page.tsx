@@ -6,7 +6,6 @@ import { ArrowUpRight, MessageCircle } from "lucide-react";
 
 import { ArticleReactionDock } from "@/components/public/article-reaction-dock";
 import { ArticleShareButtons } from "@/components/public/article-share-buttons";
-import { ArticleCommentSection } from "@/components/public/article-comment-section";
 import { RelatedLandscapeCard } from "@/components/public/related-landscape-card";
 import { BannerPanel, Wall } from "@/components/shared/banner-panel";
 import { Hem, ReadCost } from "@/components/shared/banner-parts";
@@ -293,14 +292,6 @@ export default async function ArticlePage({ params }: PageProps) {
           </Button>
         </BannerPanel>
       </section>
-
-      {/* Comment Section */}
-      <div className="px-2">
-        <ArticleCommentSection
-          articleSlug={article.slug}
-          articleTitle={article.title}
-        />
-      </div>
 
       {/* Related Articles — Landscape Cards with Thumbnails (up to 6) */}
       {related.length > 0 ? (
