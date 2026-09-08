@@ -137,7 +137,7 @@ export function readingMinutes(markdown: string): number {
 }
 
 /** Splits `tags: a, b , c` input into a clean array. */
-export function parseTagInput(value: string): string[] {
+export function parseTagInput(value: string, max = 8): string[] {
   return Array.from(
     new Set(
       value
@@ -145,7 +145,7 @@ export function parseTagInput(value: string): string[] {
         .map((tag) => tag.trim().toLowerCase())
         .filter((tag) => tag.length > 1 && tag.length <= 32),
     ),
-  ).slice(0, 8);
+  ).slice(0, max);
 }
 
 /**

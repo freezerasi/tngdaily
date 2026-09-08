@@ -122,10 +122,11 @@ export type RewriteOutput = z.infer<typeof rewriteOutputSchema>;
 export const seoOutputSchema = z.object({
   seo_title: z.string().min(3),
   meta_description: z.string().min(10),
+  excerpt: z.string().max(220).default(""),
   slug: z.string().min(3),
   primary_keyword: z.string().default(""),
-  secondary_keywords: z.array(z.string()).default([]),
-  tags: z.array(z.string()).default([]),
+  secondary_keywords: z.array(z.string()).max(8).default([]),
+  tags: z.array(z.string()).max(5).default([]),
   og_title: z.string().default(""),
   og_description: z.string().default(""),
   image_alt_text: z.string().default(""),
@@ -138,7 +139,7 @@ export const seoOutputSchema = z.object({
       }),
     )
     .default([]),
-  entity_keywords: z.array(z.string()).default([]),
+  entity_keywords: z.array(z.string()).max(12).default([]),
   geo_answer_targets: z
     .array(
       z.object({
@@ -155,6 +156,7 @@ export const seoOutputSchema = z.object({
         short_answer: z.string().default(""),
       }),
     )
+    .max(4)
     .default([]),
   content_refresh_notes: z.array(z.string()).default([]),
   // Passed through unchanged; the site renders its own JSON-LD from stored

@@ -2,6 +2,7 @@ import "server-only";
 
 import { isSupabaseAdminConfigured, isSupabaseConfigured } from "@/lib/env";
 import { getAdminSupabase, getServerSupabase } from "@/lib/supabase/server";
+import { TOPICS } from "@/lib/taxonomy";
 import type {
   AiApiKeyView,
   AiModelView,
@@ -325,6 +326,39 @@ export async function getUsageStats(
     },
     source: "supabase",
   };
+}
+
+export async function listKnownArticleTags(limit = 50): Promise<string[]> {
+  const fallback = [...TOPICS];
+  if (!isSupabaseConfigured()) return fallback;
+
+  const client = getAdminSupabase() ?? (await getServerSupabase());
+  if (!client) return fallback;
+
+  const { data, error } = await client
+    .from("articles")
+    .select("tags")
+    .not("tags", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(500);
+
+  if (error) return fallback;
+
+  const counts = new Map<string, number>();
+  for (const topic of TOPICS) counts.set(topic, 1);
+
+  for (const row of (data as Array<{ tags: string[] | null }> | null) ?? []) {
+    for (const rawTag of row.tags ?? []) {
+      const tag = rawTag.trim().toLowerCase();
+      if (tag.length < 2 || tag.length > 32) continue;
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([tag]) => tag);
 }
 
 function mapJob(row: AiGenerationJobRow): GenerationJobView {

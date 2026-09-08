@@ -65,13 +65,24 @@ export default async function NewArticlePage({
         initialDraft={{
           pillar,
           ...(read("title") ? { title: read("title") as string } : {}),
+          ...(read("slug") ? { slug: read("slug") as string } : {}),
           ...(read("dek") ? { dek: read("dek") as string } : {}),
+          ...(read("excerpt") ? { excerpt: read("excerpt") as string } : {}),
           ...(read("markdown")
             ? { contentMarkdown: read("markdown") as string }
+            : {}),
+          ...(read("coverImageAlt")
+            ? { coverImageAlt: read("coverImageAlt") as string }
             : {}),
           ...(read("seoTitle") ? { seoTitle: read("seoTitle") as string } : {}),
           ...(read("metaDescription")
             ? { metaDescription: read("metaDescription") as string }
+            : {}),
+          ...(read("primaryKeyword")
+            ? { primaryKeyword: read("primaryKeyword") as string }
+            : {}),
+          ...(read("secondaryKeywords")
+            ? { secondaryKeywordsInput: read("secondaryKeywords") as string }
             : {}),
           ...(read("tags") ? { tagsInput: read("tags") as string } : {}),
         }}

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getApiAuth } from "@/lib/auth";
-import { recordJob } from "@/lib/data/ai";
+import { listKnownArticleTags, recordJob } from "@/lib/data/ai";
 import {
   RATE_LIMITS,
   rateLimit,
@@ -18,7 +18,12 @@ import {
   runQualityGate,
   type TaskResult,
 } from "@/lib/ai/tasks";
-import { markdownToPlainText } from "@/lib/content";
+import {
+  buildExcerpt,
+  markdownToPlainText,
+  parseTagInput,
+  slugify,
+} from "@/lib/content";
 import { absoluteUrl } from "@/lib/seo";
 import {
   contentStudioDraftSchema,
@@ -31,7 +36,7 @@ import {
 import type { AiTaskType } from "@/types/domain";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /**
  * Content Studio generation endpoint.
@@ -285,6 +290,7 @@ async function handleFinish(
   const input = parsed.data;
   const nowIso = new Date().toISOString();
   const plainText = markdownToPlainText(input.articleMarkdown).slice(0, 12_000);
+  const knownTags = await listKnownArticleTags(50);
 
   const seo = await generateSeoMetadata({
     title: input.title,
@@ -295,6 +301,7 @@ async function handleFinish(
     modifiedAtIso: nowIso,
     authorName: input.authorName || authorName,
     articleUrl: absoluteUrl("/artikel/(slug-belum-final)"),
+    existingTags: knownTags.join(", "),
   });
 
   if (!seo.ok) {
@@ -309,12 +316,25 @@ async function handleFinish(
     return NextResponse.json({ ok: false, error: seo.error }, { status: 502 });
   }
 
+  const seoData = {
+    ...seo.data,
+    excerpt:
+      seo.data.excerpt.trim() || buildExcerpt(input.articleMarkdown, 180),
+    slug: slugify(seo.data.slug || input.title) || slugify(input.title) || "artikel",
+    tags: parseTagInput(seo.data.tags.join(", "), 5),
+    secondary_keywords: parseTagInput(
+      seo.data.secondary_keywords.join(", "),
+      8,
+    ),
+    entity_keywords: parseTagInput(seo.data.entity_keywords.join(", "), 12),
+  };
+
   await recordJob({
     sessionKey: input.sessionKey,
     taskType: "seo",
     status: "completed",
     jobInput: { title: input.title, pillar: input.pillar },
-    output: seo.data,
+    output: seoData,
     promptTemplateId: seo.meta.templateId,
     promptTemplateKey: seo.meta.templateKey,
     promptVersion: seo.meta.promptVersion,
@@ -335,7 +355,7 @@ async function handleFinish(
     }),
     runQualityGate({
       articleContent: input.articleMarkdown.slice(0, 40_000),
-      seoMetadataJson: JSON.stringify(seo.data, null, 2),
+      seoMetadataJson: JSON.stringify(seoData, null, 2),
       sourcesJson: "[]",
       ...(input.knownRisks ? { knownRisks: input.knownRisks } : {}),
     }),
@@ -344,7 +364,7 @@ async function handleFinish(
       pillar: input.pillar,
       articleContent: plainText.slice(0, 6000),
       distributionGoal: "Mengajak pembaca membaca artikel penuh di tngdaily.com",
-      articleUrl: absoluteUrl(`/artikel/${seo.data.slug}`),
+      articleUrl: absoluteUrl(`/artikel/${seoData.slug}`),
     }),
   ]);
 
@@ -373,7 +393,7 @@ async function handleFinish(
   return NextResponse.json({
     ok: true,
     data: {
-      seo: seo.data,
+      seo: seoData,
       imageQueries: imageQueries.ok ? imageQueries.data : null,
       imageQueriesError: imageQueries.ok ? null : imageQueries.error,
       quality: quality.ok ? quality.data : null,

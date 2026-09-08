@@ -261,11 +261,25 @@ export function ContentStudio({ sessionKey }: { sessionKey: string }) {
       markdown: draftMarkdown,
     });
     if (draftDek) params.set("dek", draftDek);
+    if (finish?.seo.slug) params.set("slug", finish.seo.slug);
+    if (finish?.seo.excerpt) params.set("excerpt", finish.seo.excerpt);
     if (finish?.seo.seo_title) params.set("seoTitle", finish.seo.seo_title);
     if (finish?.seo.meta_description) {
       params.set("metaDescription", finish.seo.meta_description);
     }
     if (finish?.seo.tags?.length) params.set("tags", finish.seo.tags.join(", "));
+    if (finish?.seo.image_alt_text) {
+      params.set("coverImageAlt", finish.seo.image_alt_text);
+    }
+    if (finish?.seo.primary_keyword) {
+      params.set("primaryKeyword", finish.seo.primary_keyword);
+    }
+    if (finish?.seo.secondary_keywords?.length) {
+      params.set(
+        "secondaryKeywords",
+        finish.seo.secondary_keywords.join(", "),
+      );
+    }
 
     router.push(`/admin/konten/baru?${params.toString()}`);
   };
@@ -878,6 +892,7 @@ export function ContentStudio({ sessionKey }: { sessionKey: string }) {
                     label="Meta description"
                     value={finish.seo.meta_description}
                   />
+                  <MetaRow label="Excerpt" value={finish.seo.excerpt} />
                   <MetaRow label="Slug usulan" value={finish.seo.slug} />
                   <MetaRow
                     label="Keyword utama"

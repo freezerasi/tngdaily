@@ -49,11 +49,11 @@ export function classifyHttpFailure(
   if (status === 400 || status === 422) {
     return {
       kind: "config",
-      keyStatus: "error",
+      keyStatus: null,
       statusCode: status,
       code: "bad_request",
       message:
-        "Provider menolak permintaan (model tidak dikenal atau parameter tidak didukung). Periksa nama model.",
+        "Provider menolak permintaan (model tidak dikenal atau parameter tidak didukung). Kandidat ini dilewati tanpa menonaktifkan key.",
       retryable: false,
     };
   }

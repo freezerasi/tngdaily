@@ -14,7 +14,7 @@ import {
 import { rewriteSynthesisSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /**
  * Rewrite synthesis.

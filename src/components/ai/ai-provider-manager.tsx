@@ -13,6 +13,7 @@ import {
   Plus,
   Power,
   RefreshCw,
+  Star,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
@@ -51,8 +52,10 @@ import {
   deleteProviderAction,
   detectProviderModelsAction,
   reorderKeysAction,
+  setDefaultProviderAction,
   setKeyStatusAction,
   saveTaskModelSettingsAction,
+  setProviderDefaultModelAction,
   setModelStatusAction,
   testApiKeyAction,
   toggleProviderAction,
@@ -106,6 +109,28 @@ export function AiProviderManager({
         ),
     [providers],
   );
+  const defaultProviderId = React.useMemo(() => {
+    const first = providers
+      .flatMap((provider) =>
+        provider.keys
+          .filter((key) => isUsableKey(key))
+          .map((key) => ({
+            providerId: provider.id,
+            priority: key.priority,
+            status: key.status,
+            isActive: provider.isActive,
+            hasModel: Boolean(provider.defaultModel),
+          })),
+      )
+      .filter((entry) => entry.isActive && entry.hasModel)
+      .sort(
+        (a, b) =>
+          keyStatusRank(a.status) - keyStatusRank(b.status) ||
+          a.priority - b.priority,
+      )[0];
+
+    return first?.providerId ?? null;
+  }, [providers]);
 
   return (
     <section className="grid gap-3">
@@ -113,7 +138,8 @@ export function AiProviderManager({
         <div>
           <h2 className="tng-display text-xl">Provider</h2>
           <p className="mt-1 text-[0.8125rem] text-muted">
-            Endpoint OpenAI-compatible. Satu provider bisa punya beberapa key.
+            Endpoint OpenAI-compatible. Provider default dipakai semua task,
+            kecuali task itu punya model manual sendiri.
           </p>
         </div>
         <ProviderDialog disabled={!canWrite} />
@@ -133,7 +159,11 @@ export function AiProviderManager({
         <ul className="grid gap-3">
           {providers.map((provider) => (
             <li key={provider.id}>
-              <ProviderCard provider={provider} canWrite={canWrite} />
+              <ProviderCard
+                provider={provider}
+                canWrite={canWrite}
+                isDefaultProvider={provider.id === defaultProviderId}
+              />
             </li>
           ))}
         </ul>
@@ -158,16 +188,30 @@ export function AiProviderManager({
   );
 }
 
+function isUsableKey(key: AiApiKeyView): boolean {
+  return key.status === "active" || key.status === "rate_limited";
+}
+
+function keyStatusRank(status: AiKeyStatus): number {
+  if (status === "active") return 0;
+  if (status === "rate_limited") return 1;
+  if (status === "error") return 2;
+  return 3;
+}
+
 function ProviderCard({
   provider,
   canWrite,
+  isDefaultProvider,
 }: {
   provider: AiProviderView;
   canWrite: boolean;
+  isDefaultProvider: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
   const [detecting, setDetecting] = React.useState(false);
+  const [defaultPending, setDefaultPending] = React.useState(false);
 
   const toggle = async (isActive: boolean) => {
     setPending(true);
@@ -193,6 +237,18 @@ function ProviderCard({
     }
   };
 
+  const setAsDefaultProvider = async () => {
+    setDefaultPending(true);
+    const result = await setDefaultProviderAction({ providerId: provider.id });
+    setDefaultPending(false);
+    if (result.ok) {
+      toast.success(result.message ?? "Provider default disimpan.");
+      router.refresh();
+    } else {
+      toast.error(result.message ?? "Provider default gagal disimpan.");
+    }
+  };
+
   return (
     <BannerPanel ink="wall" lift="sm" className="grid gap-3 p-3 sm:p-4">
       <div className="flex flex-wrap items-start gap-2">
@@ -208,19 +264,44 @@ function ProviderCard({
                 Nonaktif
               </TapePatch>
             )}
+            {isDefaultProvider ? (
+              <TapePatch tone="orange" size="sm">
+                Default
+              </TapePatch>
+            ) : null}
           </div>
           <p className="mt-1 truncate font-mono text-[0.75rem] text-muted">
             {provider.baseUrl}
           </p>
           <p className="mt-0.5 text-[0.75rem] text-muted">
-            Model default: {provider.defaultModel ?? "Belum dipilih"}
+            Model utama: {provider.defaultModel ?? "Belum dipilih"}
           </p>
           {provider.notes ? (
             <p className="mt-1.5 text-[0.8125rem] text-muted">{provider.notes}</p>
           ) : null}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {!isDefaultProvider ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={
+                !canWrite ||
+                defaultPending ||
+                provider.keys.every((key) => !isUsableKey(key)) ||
+                !provider.defaultModel
+              }
+              onClick={() => void setAsDefaultProvider()}
+            >
+              {defaultPending ? (
+                <Loader2 aria-hidden="true" className="animate-spin" />
+              ) : (
+                <Star aria-hidden="true" />
+              )}
+              Jadikan default
+            </Button>
+          ) : null}
           <label className="flex items-center gap-2">
             <span className="tng-label text-muted">Aktif</span>
             <Switch
@@ -257,13 +338,24 @@ function ProviderCard({
             model dari provider ini.
           </p>
         ) : (
-          <ul className="grid gap-2 sm:grid-cols-2">
-            {provider.models.map((model) => (
-              <li key={model.id}>
-                <ModelRow model={model} canWrite={canWrite} />
-              </li>
-            ))}
-          </ul>
+          <>
+            <p className="text-[0.8125rem] text-muted">
+              Model utama dipakai lebih dulu. Model aktif lain menjadi fallback
+              default provider dan tetap bisa dipilih manual per task.
+            </p>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {provider.models.map((model) => (
+                <li key={model.id}>
+                  <ModelRow
+                    model={model}
+                    providerId={provider.id}
+                    isDefault={model.modelKey === provider.defaultModel}
+                    canWrite={canWrite}
+                  />
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
 
@@ -316,13 +408,18 @@ function ProviderCard({
 
 function ModelRow({
   model,
+  providerId,
+  isDefault,
   canWrite,
 }: {
   model: AiModelView;
+  providerId: string;
+  isDefault: boolean;
   canWrite: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
+  const [defaultPending, setDefaultPending] = React.useState(false);
 
   const setEnabled = async (isEnabled: boolean) => {
     setPending(true);
@@ -339,6 +436,21 @@ function ModelRow({
     }
   };
 
+  const setDefault = async () => {
+    setDefaultPending(true);
+    const result = await setProviderDefaultModelAction({
+      providerId,
+      modelId: model.id,
+    });
+    setDefaultPending(false);
+    if (result.ok) {
+      toast.success(result.message ?? "Model utama disimpan.");
+      router.refresh();
+    } else {
+      toast.error(result.message ?? "Model utama gagal disimpan.");
+    }
+  };
+
   return (
     <div className="flex min-h-16 items-center gap-2 border-2 border-line bg-wall-deep p-2.5">
       <Bot aria-hidden="true" className="size-4 shrink-0 text-muted" />
@@ -351,12 +463,33 @@ function ModelRow({
           {model.lastSeenAt ? ` - ${formatFeedTime(model.lastSeenAt)}` : ""}
         </span>
       </span>
-      <Switch
-        checked={model.isEnabled}
-        disabled={!canWrite || pending}
-        onCheckedChange={(next) => void setEnabled(next)}
-        aria-label={`${model.isEnabled ? "Nonaktifkan" : "Aktifkan"} model ${model.modelKey}`}
-      />
+      <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+        {isDefault ? (
+          <TapePatch tone="lime" size="sm">
+            Utama
+          </TapePatch>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!canWrite || pending || defaultPending}
+            onClick={() => void setDefault()}
+          >
+            {defaultPending ? (
+              <Loader2 aria-hidden="true" className="animate-spin" />
+            ) : (
+              <Star aria-hidden="true" />
+            )}
+            Utama
+          </Button>
+        )}
+        <Switch
+          checked={model.isEnabled}
+          disabled={!canWrite || pending || (isDefault && model.isEnabled)}
+          onCheckedChange={(next) => void setEnabled(next)}
+          aria-label={`${model.isEnabled ? "Nonaktifkan" : "Aktifkan"} model ${model.modelKey}`}
+        />
+      </span>
     </div>
   );
 }
@@ -389,8 +522,8 @@ function TaskModelSettings({
         <h2 className="tng-display text-xl">Model per tugas</h2>
         <p className="tng-measure mt-1 text-[0.8125rem] leading-relaxed text-muted">
           Urutan pertama menjadi model utama untuk task tersebut. Urutan
-          berikutnya dipakai sebagai fallback saat provider/key error atau
-          terkena limit.
+          berikutnya dipakai sebagai fallback. Jika task dibiarkan kosong,
+          gateway memakai provider dan model default global.
         </p>
       </div>
 
@@ -552,7 +685,8 @@ function TaskModelRow({
         </ol>
       ) : (
         <p className="border-t-2 border-line pt-2 text-[0.75rem] text-muted">
-          Jika kosong, gateway memakai fallback default provider yang lama.
+          Jika kosong, task ini memakai provider default global dan model
+          fallback aktif di provider tersebut.
         </p>
       )}
 
@@ -765,10 +899,10 @@ function FallbackOrder({
       <div>
         <h2 className="tng-display text-xl">Urutan fallback</h2>
         <p className="tng-measure mt-1 text-[0.8125rem] leading-relaxed text-muted">
-          Gateway mencoba key dari atas ke bawah, maksimal empat kandidat per
-          permintaan. Error konfigurasi (401, 403, 400) langsung pindah key. Error
-          sementara (429, timeout, 5xx) dicoba ulang dua kali dengan backoff
-          sebelum pindah.
+          Urutan key menentukan provider default global. Gateway mencoba maksimal
+          empat kandidat per permintaan. Timeout dan error model langsung pindah
+          kandidat berikutnya; 429 dan 5xx dicoba ulang singkat jika masih ada
+          waktu.
         </p>
       </div>
 
@@ -841,26 +975,57 @@ function ProviderDialog({ disabled }: { disabled: boolean }) {
   const [values, setValues] = React.useState({
     name: "",
     baseUrl: "",
+    apiKey: "",
+    keyLabel: "",
     defaultModel: "",
     notes: "",
+    detectModels: true,
   });
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
   const submit = async () => {
     setPending(true);
     setErrors({});
-    const result = await createProviderAction({ ...values, isActive: true });
-    setPending(false);
+    const result = await createProviderAction({
+      name: values.name,
+      baseUrl: values.baseUrl,
+      apiKey: values.apiKey,
+      keyLabel: values.keyLabel,
+      defaultModel: values.defaultModel,
+      notes: values.notes,
+      isActive: true,
+    });
 
-    if (result.ok) {
-      toast.success(result.message ?? "Provider ditambahkan.");
-      setValues({ name: "", baseUrl: "", defaultModel: "", notes: "" });
-      setOpen(false);
-      router.refresh();
-    } else {
+    if (!result.ok) {
+      setPending(false);
       setErrors(result.fields ?? {});
       toast.error(result.message ?? "Provider gagal disimpan.");
+      return;
     }
+
+    if (values.detectModels && result.providerId) {
+      const detected = await detectProviderModelsAction(result.providerId);
+      if (detected.ok) {
+        toast.success(detected.message ?? "Provider ditambahkan dan model terdeteksi.");
+      } else {
+        toast.error(detected.message ?? "Provider tersimpan, tetapi deteksi model gagal.");
+      }
+    } else {
+      toast.success(result.message ?? "Provider ditambahkan.");
+    }
+
+    setPending(false);
+    setValues({
+      name: "",
+      baseUrl: "",
+      apiKey: "",
+      keyLabel: "",
+      defaultModel: "",
+      notes: "",
+      detectModels: true,
+    });
+    setOpen(false);
+    router.refresh();
   };
 
   return (
@@ -875,7 +1040,8 @@ function ProviderDialog({ disabled }: { disabled: boolean }) {
         <DialogHeader>
           <DialogTitle>Tambah provider AI</DialogTitle>
           <DialogDescription id="provider-desc">
-            Endpoint harus OpenAI-compatible. Base URL biasanya berakhir di /v1.
+            Isi endpoint OpenAI-compatible dan API key. Setelah tersimpan,
+            dashboard bisa mendeteksi model dari endpoint /models.
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
@@ -915,10 +1081,45 @@ function ProviderDialog({ disabled }: { disabled: boolean }) {
             </Field>
 
             <Field
-              label="Model default"
+              label="API key"
+              htmlFor="provider-api-key"
+              required
+              error={errors.apiKey}
+              hint="Diinput sekali, langsung disimpan ke secret store server."
+            >
+              <Input
+                id="provider-api-key"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                value={values.apiKey}
+                onChange={(event) =>
+                  setValues((prev) => ({ ...prev, apiKey: event.target.value }))
+                }
+              />
+            </Field>
+
+            <Field
+              label="Label key"
+              htmlFor="provider-key-label"
+              error={errors.keyLabel}
+              hint="Opsional, misalnya Key utama atau Key billing kantor."
+            >
+              <Input
+                id="provider-key-label"
+                value={values.keyLabel}
+                onChange={(event) =>
+                  setValues((prev) => ({ ...prev, keyLabel: event.target.value }))
+                }
+                maxLength={80}
+              />
+            </Field>
+
+            <Field
+              label="Model utama manual"
               htmlFor="provider-model"
               error={errors.defaultModel}
-              hint="Opsional. Bisa diisi setelah deteksi model berjalan."
+              hint="Opsional. Kosongkan jika ingin memilih dari hasil deteksi."
             >
               <Input
                 id="provider-model"
@@ -932,6 +1133,24 @@ function ProviderDialog({ disabled }: { disabled: boolean }) {
                 maxLength={120}
               />
             </Field>
+
+            <label className="flex items-center gap-2 border-2 border-line bg-wall-deep p-2.5">
+              <Switch
+                checked={values.detectModels}
+                onCheckedChange={(detectModels) =>
+                  setValues((prev) => ({ ...prev, detectModels }))
+                }
+                aria-label="Deteksi model setelah provider disimpan"
+              />
+              <span className="min-w-0">
+                <span className="block font-display text-[0.8125rem] font-extrabold text-foreground">
+                  Deteksi model setelah simpan
+                </span>
+                <span className="block text-[0.75rem] text-muted">
+                  Jika berhasil, model pertama menjadi model utama sementara.
+                </span>
+              </span>
+            </label>
 
             <Field label="Catatan" htmlFor="provider-notes" error={errors.notes}>
               <Textarea
@@ -949,13 +1168,13 @@ function ProviderDialog({ disabled }: { disabled: boolean }) {
               variant="primary"
               size="md"
               block
-              disabled={pending}
+              disabled={pending || values.apiKey.trim().length < 12}
               onClick={() => void submit()}
             >
               {pending ? (
                 <Loader2 aria-hidden="true" className="animate-spin" />
               ) : null}
-              Simpan provider
+              {pending ? "Menyimpan" : "Simpan provider"}
             </Button>
           </div>
         </DialogBody>

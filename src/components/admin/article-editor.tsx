@@ -83,7 +83,9 @@ export function ArticleEditor({
     article?.id ?? null,
   );
   const [saveState, setSaveState] = React.useState<SaveState>({ kind: "idle" });
-  const [slugLocked, setSlugLocked] = React.useState(Boolean(article));
+  const [slugLocked, setSlugLocked] = React.useState(
+    Boolean(article) || Boolean(initialDraft?.slug),
+  );
   const [scheduleValue, setScheduleValue] = React.useState(
     toDateTimeLocalValue(article?.scheduledAt),
   );
@@ -110,11 +112,11 @@ export function ArticleEditor({
       pillar: article?.pillar ?? initialDraft?.pillar ?? "vibes",
       status: article?.status ?? "draft",
       dek: article?.dek ?? initialDraft?.dek ?? "",
-      excerpt: article?.excerpt ?? "",
+      excerpt: article?.excerpt ?? initialDraft?.excerpt ?? "",
       contentMarkdown:
         article?.contentMarkdown ?? initialDraft?.contentMarkdown ?? "",
       coverImageUrl: article?.coverImageUrl ?? "",
-      coverImageAlt: article?.coverImageAlt ?? "",
+      coverImageAlt: article?.coverImageAlt ?? initialDraft?.coverImageAlt ?? "",
       coverImageCredit: article?.coverImageCredit ?? "",
       tagsInput: article?.tags.join(", ") ?? initialDraft?.tagsInput ?? "",
       authorName: article?.authorName ?? authorName,
@@ -123,8 +125,11 @@ export function ArticleEditor({
       seoTitle: article?.seoTitle ?? initialDraft?.seoTitle ?? "",
       metaDescription:
         article?.metaDescription ?? initialDraft?.metaDescription ?? "",
-      primaryKeyword: article?.primaryKeyword ?? "",
-      secondaryKeywordsInput: article?.secondaryKeywords.join(", ") ?? "",
+      primaryKeyword: article?.primaryKeyword ?? initialDraft?.primaryKeyword ?? "",
+      secondaryKeywordsInput:
+        article?.secondaryKeywords.join(", ") ??
+        initialDraft?.secondaryKeywordsInput ??
+        "",
     },
   });
 
@@ -329,6 +334,15 @@ export function ArticleEditor({
             hint="Satu sampai dua kalimat. Muncul di feed dan di bawah judul."
           >
             <Textarea id="dek" rows={2} {...register("dek")} />
+          </Field>
+
+          <Field
+            label="Excerpt"
+            htmlFor="excerpt"
+            error={errors.excerpt?.message}
+            hint="Ringkasan pendek untuk arsip, preview, dan fallback metadata. AI mengisi ini saat tahap SEO dijalankan."
+          >
+            <Textarea id="excerpt" rows={2} maxLength={400} {...register("excerpt")} />
           </Field>
         </BannerPanel>
 

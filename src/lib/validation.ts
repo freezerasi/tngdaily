@@ -211,6 +211,14 @@ export const aiProviderSchema = z.object({
       "Base URL harus https, kecuali localhost untuk development.",
     ),
   defaultModel: z.string().trim().max(120).optional().or(z.literal("")),
+  apiKey: z
+    .string()
+    .trim()
+    .min(12, "API key terlihat terlalu pendek.")
+    .max(400, "API key terlalu panjang.")
+    .optional()
+    .or(z.literal("")),
+  keyLabel: z.string().trim().max(80).optional().or(z.literal("")),
   isActive: z.boolean().default(true),
   notes: z.string().trim().max(400).optional().or(z.literal("")),
 });
@@ -239,6 +247,15 @@ export const aiKeyStatusSchema = z.object({
 export const aiModelStatusSchema = z.object({
   modelId: uuidSchema,
   isEnabled: z.boolean(),
+});
+
+export const aiProviderDefaultModelSchema = z.object({
+  providerId: uuidSchema,
+  modelId: uuidSchema,
+});
+
+export const aiDefaultProviderSchema = z.object({
+  providerId: uuidSchema,
 });
 
 export const aiTaskModelSettingsSchema = z.object({

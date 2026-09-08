@@ -34,9 +34,11 @@ import type { AiTaskType } from "@/types/domain";
  * Never logs an API key, an Authorization header, or a provider body.
  */
 
-const REQUEST_TIMEOUT_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 75_000;
+const GATEWAY_BUDGET_MS = 280_000;
+const MIN_ATTEMPT_BUDGET_MS = 5_000;
 const MAX_CANDIDATES = 4;
-const MAX_RETRIES_PER_KEY = 2;
+const MAX_RETRIES_PER_KEY = 1;
 
 export interface GatewayCandidate {
   keyId: string | null;
@@ -116,23 +118,33 @@ export async function resolveCandidates(
       .select("*")
       .in("status", ["active", "rate_limited"])
       .order("priority", { ascending: true })
-      .limit(MAX_CANDIDATES * 2);
+      .limit(MAX_CANDIDATES * 3);
 
     const keys = (keyRows as AiApiKeyRow[] | null) ?? [];
 
     if (keys.length > 0) {
       const providerIds = Array.from(new Set(keys.map((key) => key.provider_id)));
-      const { data: providerRows } = await admin
-        .from("ai_providers")
-        .select("*")
-        .in("id", providerIds)
-        .eq("is_active", true);
+      const [{ data: providerRows }, { data: modelRows }] = await Promise.all([
+        admin
+          .from("ai_providers")
+          .select("*")
+          .in("id", providerIds)
+          .eq("is_active", true),
+        admin
+          .from("ai_models")
+          .select("*")
+          .in("provider_id", providerIds)
+          .eq("is_enabled", true),
+      ]);
 
       const providers = new Map(
         ((providerRows as AiProviderRow[] | null) ?? []).map((row) => [
           row.id,
           row,
         ]),
+      );
+      const modelsByProvider = groupModelsByProvider(
+        (modelRows as AiModelRow[] | null) ?? [],
       );
 
       // Active keys first; rate-limited ones are kept as last resort rather
@@ -145,17 +157,24 @@ export async function resolveCandidates(
       for (const key of ordered) {
         const provider = providers.get(key.provider_id);
         if (!provider) continue;
-        if (!provider.default_model) continue;
-        candidates.push({
-          keyId: key.id,
-          providerId: provider.id,
-          providerName: provider.name,
-          baseUrl: provider.base_url,
-          model: provider.default_model,
-          priority: key.priority,
-          isLocalFallback: false,
-          secretId: key.vault_secret_id,
-        });
+        const modelKeys = orderedProviderModels(
+          provider,
+          modelsByProvider.get(provider.id) ?? [],
+        );
+
+        for (const modelKey of modelKeys) {
+          candidates.push({
+            keyId: key.id,
+            providerId: provider.id,
+            providerName: provider.name,
+            baseUrl: provider.base_url,
+            model: modelKey,
+            priority: key.priority,
+            isLocalFallback: false,
+            secretId: key.vault_secret_id,
+          });
+          if (candidates.length >= MAX_CANDIDATES) break;
+        }
         if (candidates.length >= MAX_CANDIDATES) break;
       }
     }
@@ -183,6 +202,42 @@ export async function resolveCandidates(
   }
 
   return candidates;
+}
+
+function groupModelsByProvider(models: AiModelRow[]): Map<string, AiModelRow[]> {
+  const grouped = new Map<string, AiModelRow[]>();
+  for (const model of models) {
+    const bucket = grouped.get(model.provider_id) ?? [];
+    bucket.push(model);
+    grouped.set(model.provider_id, bucket);
+  }
+  return grouped;
+}
+
+function orderedProviderModels(
+  provider: AiProviderRow,
+  models: AiModelRow[],
+): string[] {
+  const enabled = Array.from(
+    new Set(
+      models
+        .map((model) => model.model_key.trim())
+        .filter((modelKey) => modelKey.length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
+  if (enabled.length === 0) {
+    return provider.default_model ? [provider.default_model] : [];
+  }
+
+  if (!provider.default_model || !enabled.includes(provider.default_model)) {
+    return enabled;
+  }
+
+  return [
+    provider.default_model,
+    ...enabled.filter((modelKey) => modelKey !== provider.default_model),
+  ];
 }
 
 async function resolveTaskCandidates(
@@ -381,12 +436,13 @@ async function callOnce(
   candidate: GatewayCandidate,
   apiKey: string,
   request: GatewayRequest,
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<
   | { ok: true; content: string; usage: GatewayUsage; latencyMs: number }
   | { ok: false; failure: ClassifiedFailure; latencyMs: number }
 > {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const startedAt = Date.now();
 
   try {
@@ -486,11 +542,28 @@ export async function runGateway(
   }
 
   const tried: string[] = [];
+  const blockedProviders = new Set<string>();
+  const blockedModelSignatures = new Set<string>();
+  const deadlineAt = Date.now() + GATEWAY_BUDGET_MS;
   let totalAttempts = 0;
   let lastMessage = ALL_PROVIDERS_FAILED;
   let lastCode = "all_failed";
 
   for (const candidate of candidates) {
+    if (
+      candidate.providerId &&
+      (blockedProviders.has(candidate.providerId) ||
+        blockedModelSignatures.has(modelSignature(candidate)))
+    ) {
+      continue;
+    }
+
+    if (remainingGatewayMs(deadlineAt) < MIN_ATTEMPT_BUDGET_MS) {
+      lastMessage = "Batas waktu gateway hampir habis sebelum fallback berikutnya.";
+      lastCode = "gateway_budget_exhausted";
+      break;
+    }
+
     tried.push(candidate.providerName);
 
     let apiKey: string;
@@ -523,8 +596,20 @@ export async function runGateway(
     }
 
     for (let attempt = 1; attempt <= MAX_RETRIES_PER_KEY + 1; attempt += 1) {
+      const remainingMs = remainingGatewayMs(deadlineAt);
+      if (remainingMs < MIN_ATTEMPT_BUDGET_MS) {
+        lastMessage = "Batas waktu gateway hampir habis sebelum percobaan berikutnya.";
+        lastCode = "gateway_budget_exhausted";
+        break;
+      }
+
       totalAttempts += 1;
-      const result = await callOnce(candidate, apiKey, request);
+      const result = await callOnce(
+        candidate,
+        apiKey,
+        request,
+        attemptTimeoutMs(remainingMs),
+      );
 
       if (result.ok) {
         await Promise.all([
@@ -582,13 +667,18 @@ export async function runGateway(
         });
       }
 
-      // Configuration failures never retry the same key.
-      if (!failure.retryable) break;
+      if (shouldBlockProvider(failure) && candidate.providerId) {
+        blockedProviders.add(candidate.providerId);
+      } else if (shouldBlockSameModel(failure)) {
+        blockedModelSignatures.add(modelSignature(candidate));
+      }
 
-      if (attempt <= MAX_RETRIES_PER_KEY) {
-        await sleep(backoffDelayMs(attempt));
+      if (shouldRetrySameCandidate(failure, attempt, deadlineAt)) {
+        const delayMs = backoffDelayMs(attempt);
+        await sleep(delayMs);
         continue;
       }
+
       break;
     }
   }
@@ -600,6 +690,54 @@ export async function runGateway(
     attempts: totalAttempts,
     triedProviders: Array.from(new Set(tried)),
   };
+}
+
+function remainingGatewayMs(deadlineAt: number): number {
+  return deadlineAt - Date.now();
+}
+
+function attemptTimeoutMs(remainingMs: number): number {
+  return Math.min(
+    REQUEST_TIMEOUT_MS,
+    Math.max(MIN_ATTEMPT_BUDGET_MS, remainingMs - 2_500),
+  );
+}
+
+function modelSignature(candidate: GatewayCandidate): string {
+  return [
+    candidate.providerId ?? candidate.providerName,
+    candidate.baseUrl,
+    candidate.model,
+  ].join("|");
+}
+
+function shouldRetrySameCandidate(
+  failure: ClassifiedFailure,
+  attempt: number,
+  deadlineAt: number,
+): boolean {
+  if (!failure.retryable || attempt > MAX_RETRIES_PER_KEY) return false;
+  if (failure.code === "timeout" || failure.code === "network_error") {
+    return false;
+  }
+
+  const delayMs = backoffDelayMs(attempt);
+  return remainingGatewayMs(deadlineAt) - delayMs >= MIN_ATTEMPT_BUDGET_MS;
+}
+
+function shouldBlockProvider(failure: ClassifiedFailure): boolean {
+  return failure.code === "endpoint_not_found";
+}
+
+function shouldBlockSameModel(failure: ClassifiedFailure): boolean {
+  return (
+    failure.code === "bad_request" ||
+    failure.code === "timeout" ||
+    failure.code === "network_error" ||
+    failure.code === "request_timeout" ||
+    failure.code === "provider_error" ||
+    failure.code === "empty_response"
+  );
 }
 
 export interface StructuredSuccess<T> {

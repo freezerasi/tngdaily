@@ -306,7 +306,7 @@ ATURAN
 OUTPUT WAJIB
 Kembalikan JSON valid tanpa markdown:
 {
-  "seo_title": "...", "meta_description": "...", "slug": "...",
+  "seo_title": "...", "meta_description": "...", "excerpt": "...", "slug": "...",
   "primary_keyword": "...", "secondary_keywords": ["..."], "tags": ["..."],
   "og_title": "...", "og_description": "...", "image_alt_text": "...",
   "internal_link_suggestions": [{"anchor_text": "...", "target_topic_or_slug": "...", "reason": "..."}],
@@ -318,7 +318,7 @@ Kembalikan JSON valid tanpa markdown:
   "seo_warnings": ["..."]
 }
 
-Batas: seo_title ideal 50-60 karakter, meta_description ideal 140-160 karakter, tags maksimal 6, secondary_keywords maksimal 8, entity_keywords maksimal 12, FAQ maksimal 4.`,
+Batas: seo_title ideal 50-60 karakter, meta_description ideal 140-160 karakter, excerpt 120-180 karakter, tags maksimal 5, secondary_keywords maksimal 8, entity_keywords maksimal 12, FAQ maksimal 4.`,
   userPromptTemplate: `JUDUL ARTIKEL: {{TITLE}}
 PILAR: {{PILLAR}}
 ISI ARTIKEL FINAL:

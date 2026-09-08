@@ -12,10 +12,12 @@ import {
 } from "@/lib/ai/gateway";
 import {
   aiApiKeySchema,
+  aiDefaultProviderSchema,
   aiKeyReorderSchema,
   aiKeyStatusSchema,
   aiModelStatusSchema,
   aiProviderSchema,
+  aiProviderDefaultModelSchema,
   aiTaskModelSettingsSchema,
   fieldErrors,
   uuidSchema,
@@ -33,6 +35,7 @@ export interface AiActionResult {
   ok: boolean;
   message?: string;
   fields?: Record<string, string>;
+  providerId?: string;
 }
 
 function fail(message: string, fields?: Record<string, string>): AiActionResult {
@@ -57,25 +60,84 @@ export async function createProviderAction(
   const supabase = await getServerSupabase();
   if (!supabase) return fail("Database belum dikonfigurasi.");
 
-  const { error } = await supabase.from("ai_providers").insert({
-    name: parsed.data.name,
-    base_url: parsed.data.baseUrl.replace(/\/+$/, ""),
-    default_model: parsed.data.defaultModel || null,
-    is_active: parsed.data.isActive,
-    notes: parsed.data.notes || null,
-    created_by: auth.profile.id,
-  });
+  const { data: created, error } = await supabase
+    .from("ai_providers")
+    .insert({
+      name: parsed.data.name,
+      base_url: parsed.data.baseUrl.replace(/\/+$/, ""),
+      default_model: parsed.data.defaultModel || null,
+      is_active: parsed.data.isActive,
+      notes: parsed.data.notes || null,
+      created_by: auth.profile.id,
+    })
+    .select("id")
+    .maybeSingle();
 
-  if (error) {
+  const providerId = (created as { id: string } | null)?.id ?? null;
+
+  if (error || !providerId) {
     return fail(
-      error.code === "23505"
+      error?.code === "23505"
         ? "Sudah ada provider dengan nama itu."
         : "Provider gagal disimpan.",
     );
   }
 
+  if (parsed.data.apiKey) {
+    const admin = getAdminSupabase();
+    if (!admin) {
+      await supabase.from("ai_providers").delete().eq("id", providerId);
+      return fail(
+        "SUPABASE_SERVICE_ROLE_KEY belum diset, jadi key tidak bisa disimpan dengan aman.",
+      );
+    }
+
+    let stored: { secretId: string; preview: string };
+    try {
+      stored = await getSecretStore().saveSecret({
+        name: providerSecretName(parsed.data.name),
+        value: parsed.data.apiKey,
+        description: "TNG Daily AI provider key",
+      });
+    } catch (secretError) {
+      await supabase.from("ai_providers").delete().eq("id", providerId);
+      return fail(
+        secretError instanceof SecretStoreError
+          ? secretError.message
+          : "Secret store menolak menyimpan key.",
+      );
+    }
+
+    const { error: keyError } = await admin.from("ai_api_keys").insert({
+      provider_id: providerId,
+      vault_secret_id: stored.secretId,
+      key_label: parsed.data.keyLabel || null,
+      key_preview: stored.preview,
+      priority: 10,
+      status: "active",
+    });
+
+    if (keyError) {
+      await Promise.all([
+        getSecretStore().deleteSecret(stored.secretId).catch(() => undefined),
+        supabase.from("ai_providers").delete().eq("id", providerId),
+      ]);
+      return fail("Provider dibuat, tetapi key gagal disimpan. Provider dibatalkan.");
+    }
+  }
+
   refresh();
-  return { ok: true, message: "Provider ditambahkan." };
+  return {
+    ok: true,
+    providerId,
+    message: parsed.data.apiKey
+      ? "Provider dan API key ditambahkan."
+      : "Provider ditambahkan.",
+  };
+}
+
+function providerSecretName(providerName: string): string {
+  return `tng-ai-${providerName}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 }
 
 export async function detectProviderModelsAction(
@@ -158,7 +220,10 @@ export async function detectProviderModelsAction(
 
   if (error) return fail("Daftar model gagal disimpan.");
 
-  if (!provider.default_model && result.models[0]) {
+  if (
+    result.models[0] &&
+    (!provider.default_model || !result.models.includes(provider.default_model))
+  ) {
     await admin
       .from("ai_providers")
       .update({ default_model: result.models[0] })
@@ -196,6 +261,89 @@ export async function toggleProviderAction(
   return {
     ok: true,
     message: isActive ? "Provider diaktifkan." : "Provider dinonaktifkan.",
+  };
+}
+
+export async function setDefaultProviderAction(
+  raw: unknown,
+): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa memilih provider default.");
+
+  const parsed = aiDefaultProviderSchema.safeParse(raw);
+  if (!parsed.success) return fail("Provider default tidak valid.");
+
+  const admin = getAdminSupabase();
+  if (!admin) return fail("Database belum dikonfigurasi.");
+
+  const { data: provider } = await admin
+    .from("ai_providers")
+    .select("id, name")
+    .eq("id", parsed.data.providerId)
+    .maybeSingle();
+
+  if (!provider) return fail("Provider tidak ditemukan.");
+
+  const { data: keyRows, error: keyError } = await admin
+    .from("ai_api_keys")
+    .select("id, provider_id, priority, status")
+    .order("priority", { ascending: true });
+
+  if (keyError) return fail("Key provider gagal dibaca.");
+
+  const keys =
+    (keyRows as Array<{
+      id: string;
+      provider_id: string;
+      priority: number;
+      status: string;
+    }> | null) ?? [];
+
+  const usableTargetKeys = keys.filter(
+    (key) =>
+      key.provider_id === parsed.data.providerId &&
+      (key.status === "active" || key.status === "rate_limited"),
+  );
+
+  if (usableTargetKeys.length === 0) {
+    return fail("Provider default butuh minimal satu API key aktif.");
+  }
+
+  const statusRank = (status: string) => {
+    if (status === "active") return 0;
+    if (status === "rate_limited") return 1;
+    if (status === "error") return 2;
+    return 3;
+  };
+  const sorted = [...keys].sort((a, b) => {
+    const providerRankA = a.provider_id === parsed.data.providerId ? 0 : 1;
+    const providerRankB = b.provider_id === parsed.data.providerId ? 0 : 1;
+    return (
+      providerRankA - providerRankB ||
+      statusRank(a.status) - statusRank(b.status) ||
+      a.priority - b.priority
+    );
+  });
+
+  let priority = 10;
+  for (const key of sorted) {
+    const { error } = await admin
+      .from("ai_api_keys")
+      .update({ priority })
+      .eq("id", key.id);
+    if (error) return fail("Provider default gagal disimpan.");
+    priority += 10;
+  }
+
+  await admin
+    .from("ai_providers")
+    .update({ is_active: true })
+    .eq("id", parsed.data.providerId);
+
+  refresh();
+  return {
+    ok: true,
+    message: `${(provider as { name: string }).name} menjadi provider default.`,
   };
 }
 
@@ -268,9 +416,7 @@ export async function addApiKeyAction(raw: unknown): Promise<AiActionResult> {
   let stored: { secretId: string; preview: string };
   try {
     stored = await getSecretStore().saveSecret({
-      name: `tng-ai-${(provider as { name: string }).name}`
-        .toLowerCase()
-        .replace(/[^a-z0-9-]/g, "-"),
+      name: providerSecretName((provider as { name: string }).name),
       value: parsed.data.apiKey,
       description: "TNG Daily AI provider key",
     });
@@ -374,6 +520,18 @@ export async function setModelStatusAction(raw: unknown): Promise<AiActionResult
   const admin = getAdminSupabase();
   if (!admin) return fail("Database belum dikonfigurasi.");
 
+  const { data: modelRow } = await admin
+    .from("ai_models")
+    .select("id, provider_id, model_key")
+    .eq("id", parsed.data.modelId)
+    .maybeSingle();
+
+  const model = modelRow as
+    | { id: string; provider_id: string; model_key: string }
+    | null;
+
+  if (!model) return fail("Model tidak ditemukan.");
+
   const { error } = await admin
     .from("ai_models")
     .update({ is_enabled: parsed.data.isEnabled })
@@ -386,6 +544,34 @@ export async function setModelStatusAction(raw: unknown): Promise<AiActionResult
       .from("ai_task_models")
       .update({ is_enabled: false })
       .eq("model_id", parsed.data.modelId);
+
+    const { data: providerRow } = await admin
+      .from("ai_providers")
+      .select("default_model")
+      .eq("id", model.provider_id)
+      .maybeSingle();
+
+    const provider = providerRow as { default_model: string | null } | null;
+
+    if (provider?.default_model === model.model_key) {
+      const { data: nextModel } = await admin
+        .from("ai_models")
+        .select("model_key")
+        .eq("provider_id", model.provider_id)
+        .eq("is_enabled", true)
+        .neq("id", model.id)
+        .order("model_key", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      await admin
+        .from("ai_providers")
+        .update({
+          default_model:
+            (nextModel as { model_key: string } | null)?.model_key ?? null,
+        })
+        .eq("id", model.provider_id);
+    }
   }
 
   refresh();
@@ -393,6 +579,48 @@ export async function setModelStatusAction(raw: unknown): Promise<AiActionResult
     ok: true,
     message: parsed.data.isEnabled ? "Model diaktifkan." : "Model dinonaktifkan.",
   };
+}
+
+export async function setProviderDefaultModelAction(
+  raw: unknown,
+): Promise<AiActionResult> {
+  const auth = await getApiAuth("owner");
+  if (!auth) return fail("Hanya owner yang bisa memilih model utama.");
+
+  const parsed = aiProviderDefaultModelSchema.safeParse(raw);
+  if (!parsed.success) return fail("Model utama tidak valid.");
+
+  const admin = getAdminSupabase();
+  if (!admin) return fail("Database belum dikonfigurasi.");
+
+  const { data: modelRow } = await admin
+    .from("ai_models")
+    .select("id, provider_id, model_key")
+    .eq("id", parsed.data.modelId)
+    .eq("provider_id", parsed.data.providerId)
+    .maybeSingle();
+
+  const model = modelRow as
+    | { id: string; provider_id: string; model_key: string }
+    | null;
+
+  if (!model) return fail("Model tidak ditemukan di provider ini.");
+
+  const [{ error: modelError }, { error: providerError }] = await Promise.all([
+    admin
+      .from("ai_models")
+      .update({ is_enabled: true })
+      .eq("id", model.id),
+    admin
+      .from("ai_providers")
+      .update({ default_model: model.model_key, is_active: true })
+      .eq("id", model.provider_id),
+  ]);
+
+  if (modelError || providerError) return fail("Model utama gagal disimpan.");
+
+  refresh();
+  return { ok: true, message: `${model.model_key} menjadi model utama.` };
 }
 
 export async function saveTaskModelSettingsAction(
@@ -518,6 +746,9 @@ export async function testApiKeyAction(keyId: string): Promise<AiActionResult> {
     : row.ai_providers;
 
   if (!provider) return fail("Provider untuk key ini tidak ditemukan.");
+  if (!provider.default_model) {
+    return fail("Pilih model utama provider sebelum test connection.");
+  }
 
   const candidate: GatewayCandidate = {
     keyId: row.id,

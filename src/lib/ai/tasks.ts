@@ -50,7 +50,11 @@ async function runTask<T>(
   aiTask: AiTaskType,
   variables: Record<string, string | number | undefined>,
   schema: z.ZodType<T>,
-  options: { temperature?: number; maxTokens?: number } = {},
+  options: {
+    temperature?: number;
+    maxTokens?: number;
+    extraSystemPrompt?: string;
+  } = {},
 ): Promise<TaskResult<T>> {
   let composed: Awaited<ReturnType<typeof composePrompt>>;
   try {
@@ -77,7 +81,9 @@ async function runTask<T>(
   const result: StructuredResult<T> = await runStructuredGateway(
     {
       task: aiTask,
-      systemPrompt: composed.systemPrompt,
+      systemPrompt: options.extraSystemPrompt
+        ? `${composed.systemPrompt}\n\n---\n\n${options.extraSystemPrompt}`
+        : composed.systemPrompt,
       userPrompt: composed.userPrompt,
       ...(options.temperature !== undefined
         ? { temperature: options.temperature }
@@ -234,7 +240,17 @@ export function generateSeoMetadata(input: {
   modifiedAtIso: string;
   authorName: string;
   articleUrl: string;
+  existingTags?: string;
 }): Promise<TaskResult<SeoOutput>> {
+  const taxonomyGuard = [
+    "KONTROL TAKSONOMI WAJIB",
+    "Pilar/kategori artikel hanya boleh salah satu dari: vibes, suara, hustle, story.",
+    `Pilar artikel ini adalah ${input.pillar}. Jangan membuat kategori, rubrik, atau pilar baru.`,
+    `Tag existing yang boleh diprioritaskan: ${input.existingTags || "(belum ada tag tersimpan)"}.`,
+    "Boleh membuat tag baru jika benar-benar relevan, tetapi total tags maksimal 5, lowercase, tanpa hashtag, dan 1-3 kata per tag.",
+    "Wajib isi excerpt 120-180 karakter sebagai ringkasan manusiawi untuk feed/editor. Excerpt harus berbeda dari meta_description bila memungkinkan.",
+  ].join("\n");
+
   return runTask(
     "seo",
     "seo",
@@ -247,9 +263,10 @@ export function generateSeoMetadata(input: {
       MODIFIED_AT_ISO: input.modifiedAtIso,
       AUTHOR_NAME: input.authorName,
       ARTICLE_URL: input.articleUrl,
+      EXISTING_TAGS: input.existingTags,
     },
     seoOutputSchema,
-    { temperature: 0.5, maxTokens: 2500 },
+    { temperature: 0.5, maxTokens: 2500, extraSystemPrompt: taxonomyGuard },
   );
 }
 
