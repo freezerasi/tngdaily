@@ -45,31 +45,52 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const sources = await extractSources(parsed.data.urls);
+  let sources;
+  try {
+    sources = await extractSources(parsed.data.urls);
+  } catch {
+    return NextResponse.json(
+      { error: "Ekstraksi sumber gagal total. Coba lagi dengan URL berbeda." },
+      { status: 502 },
+    );
+  }
+
   const succeeded = sources.filter((source) => source.ok);
 
   const admin = getAdminSupabase();
   let jobId: string | null = null;
 
   if (admin) {
-    const { data } = await admin
-      .from("rewrite_jobs")
-      .insert({
-        source_urls: parsed.data.urls,
-        // Store metadata and text so the synthesis stage can be resumed and
-        // audited without re-fetching the source sites.
-        extracted_content: sources,
-        status: succeeded.length > 0 ? "processing" : "failed",
-        error_message:
-          succeeded.length > 0
-            ? null
-            : "Tidak ada URL yang berhasil diekstrak.",
-        created_by: auth.profile.id,
-      })
-      .select("id")
-      .maybeSingle();
+    // The job row is an audit trail, not a hard dependency: the editor still
+    // gets the extraction result when the database write fails, and synthesis
+    // is simply unavailable until a successful retry. The write is wrapped
+    // because a network-level failure throws instead of returning an error.
+    try {
+      const { data, error: insertError } = await admin
+        .from("rewrite_jobs")
+        .insert({
+          source_urls: parsed.data.urls,
+          // Store metadata and text so the synthesis stage can be resumed and
+          // audited without re-fetching the source sites.
+          extracted_content: sources,
+          status: succeeded.length > 0 ? "processing" : "failed",
+          error_message:
+            succeeded.length > 0
+              ? null
+              : "Tidak ada URL yang berhasil diekstrak.",
+          created_by: auth.profile.id,
+        })
+        .select("id")
+        .maybeSingle();
 
-    jobId = (data as { id: string } | null)?.id ?? null;
+      if (insertError) {
+        console.error("rewrite extract: job insert failed:", insertError.message);
+      } else {
+        jobId = (data as { id: string } | null)?.id ?? null;
+      }
+    } catch (caught) {
+      console.error("rewrite extract: job insert threw:", caught);
+    }
   }
 
   return NextResponse.json({

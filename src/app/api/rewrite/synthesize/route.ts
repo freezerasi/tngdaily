@@ -62,11 +62,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data: jobRow } = await scoped
-    .from("rewrite_jobs")
-    .select("id, extracted_content")
-    .eq("id", input.rewriteJobId)
-    .maybeSingle();
+  let jobRow: { id: string; extracted_content: unknown } | null = null;
+  try {
+    const { data, error: jobError } = await scoped
+      .from("rewrite_jobs")
+      .select("id, extracted_content")
+      .eq("id", input.rewriteJobId)
+      .maybeSingle();
+    if (jobError) {
+      console.error("rewrite synthesize: job read failed:", jobError.message);
+    }
+    jobRow = (data as { id: string; extracted_content: unknown } | null) ?? null;
+  } catch (caught) {
+    console.error("rewrite synthesize: job read threw:", caught);
+  }
 
   if (!jobRow) {
     return NextResponse.json(
@@ -80,13 +89,17 @@ export async function POST(request: NextRequest) {
   const usable = extracted.filter((source) => source.ok && source.text.length > 0);
 
   if (usable.length === 0) {
-    await admin
-      .from("rewrite_jobs")
-      .update({
-        status: "failed",
-        error_message: "Tidak ada sumber yang berhasil diekstrak.",
-      })
-      .eq("id", input.rewriteJobId);
+    try {
+      await admin
+        .from("rewrite_jobs")
+        .update({
+          status: "failed",
+          error_message: "Tidak ada sumber yang berhasil diekstrak.",
+        })
+        .eq("id", input.rewriteJobId);
+    } catch (caught) {
+      console.error("rewrite synthesize: fail-status update threw:", caught);
+    }
 
     return NextResponse.json(
       {
@@ -107,7 +120,8 @@ export async function POST(request: NextRequest) {
   });
 
   if (!result.ok) {
-    await Promise.all([
+    // Logging failures must not mask the AI result the editor needs to see.
+    await Promise.allSettled([
       admin
         .from("rewrite_jobs")
         .update({ status: "failed", error_message: result.error })
@@ -153,7 +167,9 @@ export async function POST(request: NextRequest) {
         : "completed"
       : "needs_review";
 
-  await Promise.all([
+  // Logging is best-effort: the synthesis result has already been produced and
+  // must reach the editor even when the database write fails.
+  await Promise.allSettled([
     admin
       .from("rewrite_jobs")
       .update({

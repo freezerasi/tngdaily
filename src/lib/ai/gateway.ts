@@ -36,10 +36,24 @@ import type { AiTaskType } from "@/types/domain";
  */
 
 const REQUEST_TIMEOUT_MS = 75_000;
+/**
+ * Long-form tasks legitimately need more time than a chat-sized request: a
+ * 700+ word article with an attribution map can exceed 75 seconds on slower
+ * models, and aborting mid-generation wastes the whole attempt. Routes that
+ * use these tasks already export maxDuration = 300.
+ */
+const LONG_TASK_TIMEOUT_MS = 240_000;
 const GATEWAY_BUDGET_MS = 280_000;
 const MIN_ATTEMPT_BUDGET_MS = 5_000;
 const MAX_CANDIDATES = 4;
 const MAX_RETRIES_PER_KEY = 1;
+
+/** Tasks whose output is a full article or a full-article audit. */
+const LONG_TASKS: ReadonlySet<AiTaskType> = new Set([
+  "draft",
+  "rewrite",
+  "quality",
+]);
 
 export interface GatewayCandidate {
   keyId: string | null;
@@ -62,6 +76,12 @@ export interface GatewayRequest {
   /** Overrides the provider default. */
   model?: string;
   responseFormatJson?: boolean;
+  /**
+   * Per-request timeout override in milliseconds. Defaults to the task class:
+   * long-form tasks (draft, rewrite, quality) get the extended budget, the
+   * rest use the standard request timeout.
+   */
+  timeoutMs?: number;
 }
 
 export interface GatewayUsage {
@@ -614,7 +634,7 @@ export async function runGateway(
         candidate,
         apiKey,
         request,
-        attemptTimeoutMs(remainingMs),
+        attemptTimeoutMs(request, remainingMs),
       );
 
       if (result.ok) {
@@ -698,13 +718,21 @@ export async function runGateway(
   };
 }
 
+function requestTimeoutFor(request: GatewayRequest): number {
+  if (request.timeoutMs) return request.timeoutMs;
+  return LONG_TASKS.has(request.task) ? LONG_TASK_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+}
+
 function remainingGatewayMs(deadlineAt: number): number {
   return deadlineAt - Date.now();
 }
 
-function attemptTimeoutMs(remainingMs: number): number {
+function attemptTimeoutMs(
+  request: GatewayRequest,
+  remainingMs: number,
+): number {
   return Math.min(
-    REQUEST_TIMEOUT_MS,
+    requestTimeoutFor(request),
     Math.max(MIN_ATTEMPT_BUDGET_MS, remainingMs - 2_500),
   );
 }

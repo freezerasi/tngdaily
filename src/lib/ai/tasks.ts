@@ -227,7 +227,11 @@ export function generateRewriteSynthesis(input: {
       EXTRACTED_SOURCES_JSON: input.extractedSourcesJson,
     },
     rewriteOutputSchema,
-    { temperature: 0.7, maxTokens: 8000 },
+    // 700 words is roughly 2000 tokens; the attribution map adds a few
+    // hundred more. A smaller completion budget is easier for slow or
+    // free-tier models to finish within the request timeout than the old
+    // 8000, which some providers struggle to allocate in one shot.
+    { temperature: 0.7, maxTokens: 4000 },
   );
 }
 

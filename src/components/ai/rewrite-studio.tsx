@@ -133,14 +133,19 @@ export function RewriteStudio() {
         body: JSON.stringify({ urls: cleaned }),
       });
 
-      const body = (await response.json()) as {
+      // An empty or non-JSON body (crashed route, proxy timeout) must surface
+      // as a readable message, not as a raw JSON parse error.
+      const body = (await response.json().catch(() => null)) as {
         jobId?: string | null;
         sources?: ExtractedPreview[];
         error?: string;
-      };
+      } | null;
 
-      if (!response.ok || !body.sources) {
-        throw new Error(body.error ?? "Ekstraksi gagal.");
+      if (!response.ok || !body?.sources) {
+        throw new Error(
+          body?.error ??
+            `Ekstraksi gagal (HTTP ${response.status}). Coba lagi sebentar.`,
+        );
       }
 
       setExtracted(body.sources);
@@ -181,7 +186,7 @@ export function RewriteStudio() {
         }),
       });
 
-      const body = (await response.json()) as {
+      const body = (await response.json().catch(() => null)) as {
         ok?: boolean;
         data?: RewriteOutput;
         similarity?: SimilarityReport;
@@ -191,10 +196,12 @@ export function RewriteStudio() {
         promptTemplateKey?: string;
         promptVersion?: number;
         usedFallbackTemplate?: boolean;
-      };
+      } | null;
 
-      if (!response.ok || !body.ok || !body.data) {
-        throw new Error(body.error ?? "Sintesis gagal.");
+      if (!response.ok || !body?.ok || !body.data) {
+        throw new Error(
+          body?.error ?? `Sintesis gagal (HTTP ${response.status}). Coba lagi sebentar.`,
+        );
       }
 
       setSynthesis(body.data);
