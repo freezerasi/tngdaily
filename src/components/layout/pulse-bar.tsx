@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { format } from "date-fns";
-import { id as localeId } from "date-fns/locale";
+// Deep import: the locale barrel would bundle every language (see dates.ts).
+import { id as localeId } from "date-fns/locale/id";
 
 import type { CityWeather } from "@/lib/data/pulse";
 

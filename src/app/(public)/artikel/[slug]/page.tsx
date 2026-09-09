@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
+
+import { CloudinaryImage } from "@/components/shared/cloudinary-image";
 import { notFound } from "next/navigation";
 import { ArrowUpRight, MessageCircle } from "lucide-react";
 
 import { ArticleReactionDock } from "@/components/public/article-reaction-dock";
 import { ArticleShareButtons } from "@/components/public/article-share-buttons";
+import { ViewRecorder } from "@/components/public/view-recorder";
 import { RelatedLandscapeCard } from "@/components/public/related-landscape-card";
 import { BannerPanel, Wall } from "@/components/shared/banner-panel";
 import { Hem, ReadCost } from "@/components/shared/banner-parts";
@@ -14,12 +16,11 @@ import { TapePatch } from "@/components/shared/tape-patch";
 import { Button } from "@/components/ui/button";
 import {
   getArticleBySlug,
+  getPublishedSlugs,
   getRelatedArticles,
-  getSessionReactions,
 } from "@/lib/data/articles";
 import { formatDateLong, formatFeedTime } from "@/lib/dates";
 import { articleJsonLdGraph, articleMetadata, articleUrl } from "@/lib/seo";
-import { readSessionId } from "@/lib/security/session";
 import { PILLAR_INK, onPanelText } from "@/lib/pillar-ink";
 import { cn } from "@/lib/utils";
 import { PILLAR_META } from "@/types/domain";
@@ -39,16 +40,31 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return articleMetadata(data);
 }
 
+/**
+ * Prerender every published article at build time. With four articles this is
+ * trivial; as the archive grows, Next still caps build work to this list and
+ * any new slug renders on first request, then caches for `revalidate`.
+ */
+export async function generateStaticParams(): Promise<Array<{ slug: string }>> {
+  try {
+    const slugs = await getPublishedSlugs();
+    return slugs.map(({ slug }) => ({ slug }));
+  } catch {
+    // A build must never fail because the database was unreachable; unknown
+    // slugs render on demand instead.
+    return [];
+  }
+}
+
 export default async function ArticlePage({ params }: PageProps) {
   const { slug } = await params;
   const { data: article } = await getArticleBySlug(slug);
   if (!article) notFound();
 
-  const sessionId = await readSessionId();
-  const [related, reactions] = await Promise.all([
-    getRelatedArticles(article, 6),
-    getSessionReactions(article.id, sessionId),
-  ]);
+  // Deliberately no session read here: touching cookies() would opt this route
+  // out of static ISR. The dock hydrates pressed state in the browser, and
+  // views count through the beacon below.
+  const related = await getRelatedArticles(article, 6);
 
   const ink = PILLAR_INK[article.pillar];
   const text = onPanelText(article.pillar);
@@ -59,6 +75,7 @@ export default async function ArticlePage({ params }: PageProps) {
 
   return (
     <Wall className="pb-24 lg:pb-8">
+      <ViewRecorder articleId={article.id} />
       {articleGraph ? (
         <script
           type="application/ld+json"
@@ -159,13 +176,12 @@ export default async function ArticlePage({ params }: PageProps) {
         {article.coverImageUrl ? (
           <figure className="px-2 pt-3">
             <div className="relative aspect-[16/9] w-full border-2 border-keyline shadow-[var(--shadow-hard)]">
-              <Image
+              <CloudinaryImage
                 src={article.coverImageUrl}
                 alt={article.coverImageAlt ?? "Gambar tanpa deskripsi."}
-                fill
-                priority
                 sizes="(min-width: 1024px) 960px, 100vw"
-                className="object-cover"
+                widths={[960, 1280, 1600]}
+                eager
               />
               <MediaStatusBadge
                 provenance={article.coverProvenance}
@@ -308,7 +324,8 @@ export default async function ArticlePage({ params }: PageProps) {
         </section>
       ) : null}
 
-      {/* Thumb-zone dock. Appears once the reader starts scrolling. */}
+      {/* Thumb-zone dock. Appears once the reader starts scrolling; the pressed
+          state hydrates in the browser so this page can stay static. */}
       <ArticleReactionDock
         articleId={article.id}
         articleTitle={article.title}
@@ -318,7 +335,7 @@ export default async function ArticlePage({ params }: PageProps) {
           save: article.counts.save,
           share: article.counts.share,
         }}
-        active={reactions}
+        active={{ like: false, save: false, share: false }}
       />
     </Wall>
   );

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,6 +32,7 @@ import {
 import { BannerPanel } from "@/components/shared/banner-panel";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Label, Textarea } from "@/components/ui/field";
+import { CloudinaryImage } from "@/components/shared/cloudinary-image";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { ImagePicker, type PickedImage } from "@/components/editor/image-picker";
 import { AiAssistant } from "@/components/ai/ai-assistant";
@@ -679,13 +679,11 @@ export function ArticleEditor({
           {coverImageUrl ? (
             <div className="grid gap-2">
               <div className="relative aspect-[16/10] w-full border-2 border-line">
-                <Image
+                <CloudinaryImage
                   src={coverImageUrl}
                   alt={coverImageAlt || "Pratinjau cover"}
-                  fill
                   sizes="320px"
-                  className="object-cover"
-                  unoptimized
+                  widths={[320, 640]}
                 />
               </div>
               {coverAttribution ? (

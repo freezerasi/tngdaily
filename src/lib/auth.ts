@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
@@ -23,8 +24,12 @@ export type AuthState =
  * Resolves the caller's session and profile row. Returns a discriminated state
  * rather than throwing, so a page can render a setup or login state instead of
  * a stack trace when Supabase is not wired up yet.
+ *
+ * Cached per request: the admin layout and the page below it both resolve auth
+ * (plus every API guard in the same render), but the session only needs one
+ * `getUser` round trip. React `cache()` dedupes them into a single call.
  */
-export async function getAuthState(): Promise<AuthState> {
+export const getAuthState = cache(async function getAuthState(): Promise<AuthState> {
   const supabase = await getServerSupabase();
   if (!supabase) return { kind: "unconfigured" };
 
@@ -73,7 +78,7 @@ export async function getAuthState(): Promise<AuthState> {
   }
 
   return { kind: "authenticated", context };
-}
+});
 
 /**
  * Page-level guard. Redirects unauthenticated callers to the login screen,

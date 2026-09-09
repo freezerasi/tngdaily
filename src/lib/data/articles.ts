@@ -9,7 +9,7 @@ import {
   filterIndexable,
   filterPublishable,
 } from "@/lib/content-environment";
-import { getPublicSupabase, getServerSupabase } from "@/lib/supabase/server";
+import { getPublicSupabase } from "@/lib/supabase/server";
 import {
   DEMO_ARTICLE_SUMMARIES,
   findDemoArticle,
@@ -182,33 +182,25 @@ export const getArticleBySlug = cache(async function getArticleBySlug(
   return { data: mapArticleDetail(row, sources, images), source: "supabase" };
 });
 
-/** Related articles: same pillar first, then shared tags. */
+/**
+ * Related articles: same pillar first, then newest fill.
+ *
+ * A single query does the work the old code needed two sequential round trips
+ * for: candidates arrive newest-first and the same-pillar ones bubble to the
+ * front in memory. Same ordering contract, one RTT.
+ */
 export async function getRelatedArticles(
   article: ArticleSummary,
   limit = 4,
 ): Promise<ArticleSummary[]> {
-  const samePillar = await getPublishedArticles({
-    pillar: article.pillar,
-    excludeSlug: article.slug,
-    limit,
-  });
-
-  if (samePillar.data.items.length >= limit) return samePillar.data.items;
-
-  const fill = await getPublishedArticles({
+  const { data } = await getPublishedArticles({
     excludeSlug: article.slug,
     limit: limit * 2,
   });
 
-  const seen = new Set(samePillar.data.items.map((a) => a.id));
-  const merged = [...samePillar.data.items];
-  for (const candidate of fill.data.items) {
-    if (merged.length >= limit) break;
-    if (seen.has(candidate.id)) continue;
-    merged.push(candidate);
-    seen.add(candidate.id);
-  }
-  return merged;
+  const samePillar = data.items.filter((a) => a.pillar === article.pillar);
+  const rest = data.items.filter((a) => a.pillar !== article.pillar);
+  return [...samePillar, ...rest].slice(0, limit);
 }
 
 /**
@@ -247,17 +239,6 @@ export const getPublishedSlugs = unstable_cache(
   ["published-slugs"],
   { revalidate: 900, tags: ["articles"] },
 );
-
-/**
- * Records a view. Uses the atomic SQL function so concurrent readers cannot
- * clobber each other's increment.
- */
-export async function recordArticleView(articleId: string): Promise<void> {
-  if (!isSupabaseConfigured()) return;
-  const supabase = await getServerSupabase();
-  if (!supabase) return;
-  await supabase.rpc("tng_increment_article_view", { p_article_id: articleId });
-}
 
 /** Reaction counts plus which reactions this session already made. */
 export async function getSessionReactions(

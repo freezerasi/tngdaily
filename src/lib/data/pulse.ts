@@ -70,6 +70,9 @@ export async function getCityWeather(): Promise<CityWeather | null> {
     const response = await fetch(ENDPOINT, {
       next: { revalidate: 900, tags: ["city-pulse"] },
       headers: { Accept: "application/json" },
+      // A hanging upstream must never hold the page shell hostage: fail fast
+      // and let the strip render without the weather segment.
+      signal: AbortSignal.timeout(4_000),
     });
 
     if (!response.ok) return null;

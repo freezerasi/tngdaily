@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Check, FileText, MapPin, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
+
+import { CloudinaryImage } from "@/components/shared/cloudinary-image";
 
 import {
   AlertDialog,
@@ -128,13 +129,11 @@ function ContributionCard({
         <ul className="flex flex-wrap gap-2">
           {contribution.mediaUrls.map((url) => (
             <li key={url} className="relative size-20 border-2 border-line">
-              <Image
+              <CloudinaryImage
                 src={url}
                 alt={`Lampiran kiriman ${contribution.title}`}
-                fill
                 sizes="80px"
-                className="object-cover"
-                unoptimized
+                widths={[160, 240]}
               />
             </li>
           ))}

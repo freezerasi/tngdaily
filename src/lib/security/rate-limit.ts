@@ -64,6 +64,9 @@ export function rateLimit(
 
 export const RATE_LIMITS = {
   reactions: { limit: 60, windowMs: 60_000 },
+  // View beacon: generous on purpose — a refresh legitimately counts twice,
+  // and the RPC only touches published rows. The budget exists to blunt floods.
+  articleViews: { limit: 120, windowMs: 60_000 },
   contributions: { limit: 3, windowMs: 60 * 60 * 1000 },
   contributionUploads: { limit: 8, windowMs: 60 * 60 * 1000 },
   imageSearch: { limit: 40, windowMs: 60_000 },

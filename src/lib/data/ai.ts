@@ -257,72 +257,48 @@ export async function getUsageStats(
   if (!scoped) return { data: empty, source: "unconfigured" };
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await scoped
-    .from("ai_usage_log")
-    .select("provider_name, success, latency_ms, tokens_used")
-    .gte("created_at", since)
-    .limit(5000);
 
+  // One round trip: tng_ai_usage_stats (migration 0020) aggregates inside
+  // Postgres instead of pulling up to 5000 log rows into Node. The shape is
+  // validated defensively because it crosses the database boundary as JSON.
+  const { data, error } = await scoped.rpc("tng_ai_usage_stats", {
+    p_since: since,
+  });
   if (error) return { data: empty, source: "supabase", error: error.message };
-
-  const rows = (data ?? []) as Array<{
-    provider_name: string | null;
-    success: boolean;
-    latency_ms: number | null;
-    tokens_used: number | null;
-  }>;
-
-  if (rows.length === 0) return { data: empty, source: "supabase" };
-
-  const grouped = new Map<
-    string,
-    { requests: number; success: number; latency: number; latencyCount: number }
-  >();
-
-  let totalLatency = 0;
-  let latencySamples = 0;
-  let totalTokens = 0;
-  let successCount = 0;
-
-  for (const row of rows) {
-    const provider = row.provider_name ?? "Tidak diketahui";
-    const bucket =
-      grouped.get(provider) ??
-      { requests: 0, success: 0, latency: 0, latencyCount: 0 };
-
-    bucket.requests += 1;
-    if (row.success) {
-      bucket.success += 1;
-      successCount += 1;
-    }
-    if (typeof row.latency_ms === "number") {
-      bucket.latency += row.latency_ms;
-      bucket.latencyCount += 1;
-      totalLatency += row.latency_ms;
-      latencySamples += 1;
-    }
-    totalTokens += row.tokens_used ?? 0;
-    grouped.set(provider, bucket);
+  if (typeof data !== "object" || data === null) {
+    return { data: empty, source: "supabase" };
   }
+
+  const stats = data as Record<string, unknown>;
+  const num = (value: unknown): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
+
+  const perProviderRaw: unknown[] = Array.isArray(stats.perProvider)
+    ? stats.perProvider
+    : [];
+  const perProvider = perProviderRaw
+    .filter(
+      (entry): entry is Record<string, unknown> =>
+        typeof entry === "object" && entry !== null,
+    )
+    .map((entry) => ({
+      providerName:
+        typeof entry.providerName === "string" && entry.providerName
+          ? entry.providerName
+          : "Tidak diketahui",
+      requests: num(entry.requests),
+      successRate: num(entry.successRate),
+      averageLatencyMs: num(entry.averageLatencyMs),
+    }))
+    .sort((a, b) => b.requests - a.requests);
 
   return {
     data: {
-      totalRequests: rows.length,
-      successRate: Math.round((successCount / rows.length) * 100),
-      averageLatencyMs:
-        latencySamples === 0 ? 0 : Math.round(totalLatency / latencySamples),
-      totalTokens,
-      perProvider: Array.from(grouped.entries())
-        .map(([providerName, bucket]) => ({
-          providerName,
-          requests: bucket.requests,
-          successRate: Math.round((bucket.success / bucket.requests) * 100),
-          averageLatencyMs:
-            bucket.latencyCount === 0
-              ? 0
-              : Math.round(bucket.latency / bucket.latencyCount),
-        }))
-        .sort((a, b) => b.requests - a.requests),
+      totalRequests: num(stats.totalRequests),
+      successRate: num(stats.successRate),
+      averageLatencyMs: num(stats.averageLatencyMs),
+      totalTokens: num(stats.totalTokens),
+      perProvider,
     },
     source: "supabase",
   };

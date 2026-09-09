@@ -1,6 +1,7 @@
-import Image from "next/image";
 import Link from "next/link";
 import { MapPin } from "lucide-react";
+
+import { CloudinaryImage } from "@/components/shared/cloudinary-image";
 
 import { ScribbleArrow, ScribbleQuote } from "@/components/branding/scribble";
 import { Hem, ReadCost } from "@/components/shared/banner-parts";
@@ -142,13 +143,12 @@ function Cover({
       )}
     >
       {article.coverImageUrl ? (
-        <Image
+        <CloudinaryImage
           src={article.coverImageUrl}
           alt={article.coverImageAlt ?? `Ilustrasi untuk ${article.title}`}
-          fill
           sizes={sizes}
-          priority={priority}
-          className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]"
+          eager={priority}
+          className="transition-transform duration-300 ease-out group-hover:scale-[1.03]"
         />
       ) : (
         // No photo: the pillar's own material stands in, with its wordmark

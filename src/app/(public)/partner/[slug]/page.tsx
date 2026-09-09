@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
+
+import { CloudinaryImage } from "@/components/shared/cloudinary-image";
 import { notFound } from "next/navigation";
 
 import {
@@ -115,13 +116,12 @@ export default async function PartnerStoryPage({ params }: PageProps) {
         {story.coverImageUrl ? (
           <figure className="mt-5">
             <div className="relative aspect-[16/9] w-full border-2 border-keyline bg-bone shadow-[var(--shadow-hard)]">
-              <Image
+              <CloudinaryImage
                 src={story.coverImageUrl}
                 alt={story.coverImageAlt ?? story.title}
-                fill
-                priority
                 sizes="(min-width: 1024px) 960px, 100vw"
-                className="object-cover"
+                widths={[960, 1280, 1600]}
+                eager
               />
             </div>
             <MediaDisclosure provenance={story.coverProvenance} />

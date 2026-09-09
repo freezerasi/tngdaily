@@ -11,10 +11,35 @@ import {
   clientAddressFrom,
   ensureSessionId,
   hashClientIdentifier,
+  readSessionId,
 } from "@/lib/security/session";
+import { getSessionReactions } from "@/lib/data/articles";
 import { reactionRequestSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
+
+/**
+ * Session reaction state.
+ *
+ * Read-only and cookie-bound: it answers only "what did THIS reader already
+ * press", so it is safe to call from the browser. The article page stays out
+ * of the cookie jar on purpose — reading the session during render would opt
+ * the route out of static ISR, and this endpoint lets the client dock hydrate
+ * its pressed state after paint instead.
+ */
+export async function GET(request: NextRequest) {
+  const articleId = request.nextUrl.searchParams.get("articleId")?.trim() ?? "";
+  if (!articleId || articleId.length > 100) {
+    return NextResponse.json(
+      { error: "articleId tidak valid." },
+      { status: 400 },
+    );
+  }
+
+  const sessionId = await readSessionId();
+  const active = await getSessionReactions(articleId, sessionId);
+  return NextResponse.json({ active });
+}
 
 /**
  * Reaction toggle.

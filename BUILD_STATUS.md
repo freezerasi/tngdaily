@@ -8,7 +8,7 @@ integrasi eksternal terverifikasi sampai batas kontrak, tipe, validasi, dan
 penanganan error, tetapi **tidak** terverifikasi terhadap layanan aslinya. Bagian
 mana yang mana ditandai eksplisit di bawah.
 
-Terakhir diperbarui: 9 September 2026 (verifikasi integrasi end-to-end + perbaikan).
+Terakhir diperbarui: 9 September 2026 (verifikasi integrasi end-to-end + perbaikan + audit & optimasi kinerja Fase 1–4).
 
 ---
 
@@ -23,7 +23,8 @@ berjalan.
 | `npm run lint` | lulus, 0 error 0 warning (9 Sep 2026: `.kilo/**`, `.codex/**`, `.playwright-cli/**` di-ignore sebagai tooling vendored; `any` + unused var di `src/lib/ai/extract.ts` diperbaiki dengan `parseJinaPayload` + narrowing) |
 | `npm run typecheck` | lulus, TypeScript strict + `noUncheckedIndexedAccess` |
 | `npm run test` | 32/32 lulus (9 Sep 2026): 3 ops eksisting + 1 gateway-mock eksisting + 28 baru — klasifikasi fallback AI (9), SSRF guard (9), taksonomi/label (6), deploy-readiness (4). Loader `tests/helpers/require-server.mjs` dipakai bersama untuk mengeksekusi source TS server-side di plain Node |
-| `npm run build` | lulus, 27 halaman statis dan seluruh route dinamis ter-generate |
+| `npm run build` | lulus, 27 halaman statis dan seluruh route dinamis ter-generate. `/artikel/[slug]` kembali prerender ISR (`●`, revalidate 5 mnt) setelah `cookies()` dikeluarkan dari render path |
+| Kinerja (audit 9 Sep 2026) | TTFB artikel dinamis ~600 ms+ (6 RTT sekuensial) → ISR cache HIT ~130 ms; home HIT ~146 ms (server produksi lokal). 541 KB shared JS/halaman; form 399 KB dikeluarkan dari `/kirim-berita` (kini hanya di halaman editor + login); `next/image` dihapus dari 11 titik diganti `CloudinaryImage` direct + `srcset` (0 ref optimizer di HTML); dashboard 6 query → 1 RPC; AI stats scan 5000 baris → 1 RPC; auth 2× `getUser` → 1× via `cache()`; skeleton `loading.tsx` publik + dashboard |
 | `npm run deploy:check` | lulus dengan 0 peringatan pada 9 Sep 2026 (sebelumnya 1 WARN Cloudinary palsu, diperbaiki: script kini menerima fallback `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_FOLDER` seperti `src/lib/env.ts`) |
 | RLS `articles` | **diperbaiki 9 Sep 2026**: RLS sempat nonaktif sehingga anon bisa membaca draft via PostgREST langsung; migration `0018_enable_articles_rls_repair.sql` mengaktifkannya kembali dan anon kini hanya melihat artikel published |
 | `impeccable detect --json src/app src/components` | `[]`, bersih |

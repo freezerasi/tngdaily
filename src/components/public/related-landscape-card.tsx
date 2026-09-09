@@ -1,6 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
 
+import { CloudinaryImage } from "@/components/shared/cloudinary-image";
 import { BannerPanel } from "@/components/shared/banner-panel";
 import { formatFeedTime } from "@/lib/dates";
 import { PILLAR_INK } from "@/lib/pillar-ink";
@@ -36,12 +36,12 @@ export function RelatedLandscapeCard({
         {/* Landscape Thumbnail */}
         {article.coverImageUrl ? (
           <div className="relative aspect-[16/10] w-full shrink-0 overflow-hidden border-b-2 border-line sm:aspect-auto sm:w-44 md:w-48 lg:w-52 sm:border-b-0 sm:border-r-2 bg-surface-strong">
-            <Image
+            <CloudinaryImage
               src={article.coverImageUrl}
               alt={article.coverImageAlt ?? article.title}
-              fill
               sizes="(min-width: 1024px) 220px, (min-width: 640px) 190px, 100vw"
-              className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.04]"
+              widths={[320, 480, 640]}
+              className="transition-transform duration-300 ease-out group-hover:scale-[1.04]"
             />
             <span
               className={cn(

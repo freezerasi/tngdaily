@@ -1,5 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
+
+import { CloudinaryImage } from "@/components/shared/cloudinary-image";
 
 import { ScribbleArrow, ScribbleBracket } from "@/components/branding/scribble";
 import { formatDateShort } from "@/lib/dates";
@@ -74,12 +75,12 @@ export function PartnerCard({
           {/* Landscape Thumbnail: 16:10 on mobile, responsive fixed width on sm+ */}
           {story.coverImageUrl ? (
             <div className="relative aspect-[16/10] w-full shrink-0 overflow-hidden border-b-2 border-dashed border-ink/20 sm:aspect-auto sm:w-48 md:w-52 lg:w-56 sm:border-b-0 sm:border-r-2">
-              <Image
+              <CloudinaryImage
                 src={story.coverImageUrl}
                 alt={story.coverImageAlt ?? story.title}
-                fill
                 sizes="(min-width: 1024px) 240px, (min-width: 640px) 210px, 100vw"
-                className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.04]"
+                widths={[320, 480, 640]}
+                className="transition-transform duration-300 ease-out group-hover:scale-[1.04]"
               />
               {story.isMock ? (
                 <span className="absolute right-2 top-2 inline-flex items-center border border-ink bg-bone/95 px-1 py-0.5 font-display text-[0.5rem] font-extrabold uppercase tracking-wider text-ink">
@@ -172,12 +173,12 @@ export function PartnerCard({
            * `object-cover` crops to the centre where the mark sits.
            */
           <div className="relative aspect-[3/4] w-full overflow-hidden border-b-2 border-dashed border-ink/25">
-            <Image
+            <CloudinaryImage
               src={story.coverImageUrl}
               alt={story.coverImageAlt ?? story.title}
-              fill
               sizes="(min-width: 1024px) 300px, (min-width: 640px) 45vw, 80vw"
-              className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]"
+              widths={[480, 640, 960]}
+              className="transition-transform duration-300 ease-out group-hover:scale-[1.03]"
             />
             {/* Development fixtures carry a visible marker, so a screenshot of
                 the layout cannot read as a real paid placement. */}

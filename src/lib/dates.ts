@@ -1,5 +1,7 @@
 import { format, formatDistanceToNowStrict, isValid, parseISO } from "date-fns";
-import { id as localeId } from "date-fns/locale";
+// Deep locale import on purpose: the `date-fns/locale` barrel re-exports every
+// language (~100+ locales) into any client bundle that reaches this module.
+import { id as localeId } from "date-fns/locale/id";
 
 function toDate(value: string | Date | null | undefined): Date | null {
   if (!value) return null;

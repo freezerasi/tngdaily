@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,6 +10,8 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+
+import { CloudinaryImage } from "@/components/shared/cloudinary-image";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -448,13 +449,11 @@ function StockPanel({
                 >
                   <span className="relative block aspect-video w-full overflow-hidden border-b-2 border-line">
                     {photo.previewUrl ? (
-                      <Image
+                      <CloudinaryImage
                         src={photo.previewUrl}
                         alt={photo.altText}
-                        fill
                         sizes="(min-width: 640px) 240px, 45vw"
-                        className="object-cover"
-                        unoptimized
+                        widths={[320, 480]}
                       />
                     ) : null}
                     {ingestingId === photo.id ? (

@@ -73,6 +73,11 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   allowedDevOrigins: ["localhost", "127.0.0.1"],
+  experimental: {
+    // lucide-react is imported by name in 40+ components; without this each
+    // page risks carrying icon modules it never renders.
+    optimizePackageImports: ["lucide-react"],
+  },
   images: {
     // Cloudinary handles transformation; Next only needs the remote allowlist,
     // which mirrors the CSP img-src list exactly.

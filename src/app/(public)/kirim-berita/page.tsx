@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { BannerPanel } from "@/components/shared/banner-panel";
 import { StaticPageShell } from "@/components/public/static-page-shell";
-import { KirimBeritaForm } from "@/components/public/kirim-berita-form";
+import { KirimBeritaFormLazy } from "@/components/public/kirim-berita-form-lazy";
 
 export const metadata: Metadata = {
   title: "Kirim Berita ke TNG Daily | Panduan Kontributor Warga Tangerang",
@@ -142,7 +142,7 @@ export default function KirimBeritaPage() {
         <h2 className="tng-display-tight text-2xl text-foreground">
           Formulir kirim berita
         </h2>
-        <KirimBeritaForm />
+        <KirimBeritaFormLazy />
       </section>
 
       <section className="space-y-3">

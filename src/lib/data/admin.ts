@@ -179,63 +179,33 @@ export async function getDashboardStats(): Promise<DataResult<DashboardStats>> {
     Date.now() - 7 * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  const [published, drafts, scheduled, pending, counters, aiLog] =
-    await Promise.all([
-      supabase
-        .from("articles")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "published"),
-      supabase
-        .from("articles")
-        .select("id", { count: "exact", head: true })
-        .in("status", ["draft", "needs_review"]),
-      supabase
-        .from("articles")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "scheduled"),
-      supabase
-        .from("contributions")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending"),
-      supabase
-        .from("articles")
-        .select("view_count, like_count, save_count, share_count")
-        .eq("status", "published")
-        .limit(1000),
-      supabase
-        .from("ai_usage_log")
-        .select("success")
-        .gte("created_at", sevenDaysAgo)
-        .limit(2000),
-    ]);
+  // One round trip: the aggregates are computed inside Postgres by
+  // tng_dashboard_stats (migration 0020) instead of fanning out 6 queries and
+  // reducing capped row windows in Node.
+  const { data, error } = await supabase.rpc("tng_dashboard_stats", {
+    p_since: sevenDaysAgo,
+  });
+  if (error) return { data: empty, source: "supabase", error: error.message };
 
-  const counterRows = (counters.data ?? []) as Array<{
-    view_count: number;
-    like_count: number;
-    save_count: number;
-    share_count: number;
-  }>;
+  const row = (Array.isArray(data) ? data[0] : data) as Record<
+    string,
+    unknown
+  > | null;
+  if (!row) return { data: empty, source: "supabase" };
 
-  const totalViews = counterRows.reduce((sum, row) => sum + row.view_count, 0);
-  const totalReactions = counterRows.reduce(
-    (sum, row) => sum + row.like_count + row.save_count + row.share_count,
-    0,
-  );
-
-  const aiRows = (aiLog.data ?? []) as Array<{ success: boolean }>;
-  const aiSuccess = aiRows.filter((row) => row.success).length;
+  const num = (value: unknown): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
 
   return {
     data: {
-      publishedCount: published.count ?? 0,
-      draftCount: drafts.count ?? 0,
-      scheduledCount: scheduled.count ?? 0,
-      pendingContributions: pending.count ?? 0,
-      totalViews,
-      totalReactions,
-      aiRequests7d: aiRows.length,
-      aiSuccessRate7d:
-        aiRows.length === 0 ? 0 : Math.round((aiSuccess / aiRows.length) * 100),
+      publishedCount: num(row.published_count),
+      draftCount: num(row.draft_count),
+      scheduledCount: num(row.scheduled_count),
+      pendingContributions: num(row.pending_contributions),
+      totalViews: num(row.total_views),
+      totalReactions: num(row.total_reactions),
+      aiRequests7d: num(row.ai_requests_7d),
+      aiSuccessRate7d: num(row.ai_success_rate_7d),
     },
     source: "supabase",
   };

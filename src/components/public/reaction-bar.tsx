@@ -39,6 +39,14 @@ export function ReactionBar({
 }) {
   const [state, setState] = React.useState({ counts, active });
   const [pending, setPending] = React.useState<ReactionType | null>(null);
+  // The reader's own toggles win over late hydration: once they press
+  // anything, incoming `active` props no longer overwrite local state.
+  const userTouched = React.useRef(false);
+  React.useEffect(() => {
+    if (!userTouched.current) {
+      setState((prev) => ({ ...prev, active }));
+    }
+  }, [active]);
 
   const send = React.useCallback(
     async (type: ReactionType, nextActive: boolean) => {
@@ -91,6 +99,7 @@ export function ReactionBar({
   );
 
   const toggle = (type: ReactionType) => {
+    userTouched.current = true;
     const nextActive = !state.active[type];
     setState((prev) => ({
       counts: {
@@ -122,6 +131,7 @@ export function ReactionBar({
     }
 
     if (!state.active.share) {
+      userTouched.current = true;
       setState((prev) => ({
         counts: { ...prev.counts, share: prev.counts.share + 1 },
         active: { ...prev.active, share: true },

@@ -1,5 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
+
+import { CloudinaryImage } from "@/components/shared/cloudinary-image";
 
 import {
   ScribbleArrow,
@@ -56,13 +57,13 @@ export function EditorialHero({
             {/* Cover Image with controlled proportional height */}
             <div className="relative h-[240px] w-full overflow-hidden border-b-2 border-keyline bg-surface-strong sm:h-[300px] lg:h-[290px] xl:h-[310px]">
               {lead.coverImageUrl ? (
-                <Image
+                <CloudinaryImage
                   src={lead.coverImageUrl}
                   alt={lead.coverImageAlt ?? lead.title}
-                  fill
-                  priority
                   sizes="(min-width: 1280px) 720px, (min-width: 1024px) 58vw, 100vw"
-                  className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]"
+                  widths={[960, 1280, 1600]}
+                  eager
+                  className="transition-transform duration-500 ease-out group-hover:scale-[1.02]"
                 />
               ) : (
                 <div className="flex size-full items-center justify-center bg-surface-strong text-muted">
@@ -184,12 +185,12 @@ export function EditorialHero({
                   {/* Thumbnail Image */}
                   <div className="relative h-18 w-24 shrink-0 overflow-hidden border border-line bg-surface transition-colors group-hover:border-lime sm:h-20 sm:w-28">
                     {article.coverImageUrl ? (
-                      <Image
+                      <CloudinaryImage
                         src={article.coverImageUrl}
                         alt={article.coverImageAlt ?? article.title}
-                        fill
                         sizes="120px"
-                        className="object-cover transition-transform duration-300 group-hover:scale-105"
+                        widths={[240, 360, 480]}
+                        className="transition-transform duration-300 group-hover:scale-105"
                       />
                     ) : (
                       <div className="flex size-full items-center justify-center bg-surface text-[0.625rem] font-bold uppercase text-muted">

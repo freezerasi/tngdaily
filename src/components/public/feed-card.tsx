@@ -1,7 +1,7 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, ChevronDown } from "lucide-react";
 
+import { CloudinaryImage } from "@/components/shared/cloudinary-image";
 import { BannerPanel } from "@/components/shared/banner-panel";
 import { Hem, ReadCost } from "@/components/shared/banner-parts";
 import { TapePatch } from "@/components/shared/tape-patch";
@@ -87,13 +87,11 @@ export function FeedCard({
       {/* Cover: real image when present, otherwise the panel's own material. */}
       {article.coverImageUrl ? (
         <div className="relative aspect-[16/10] w-full shrink-0 border-b-2 border-keyline">
-          <Image
+          <CloudinaryImage
             src={article.coverImageUrl}
             alt={article.coverImageAlt ?? `Ilustrasi untuk ${article.title}`}
-            fill
             sizes="(min-width: 1024px) 640px, 100vw"
-            priority={priority}
-            className="object-cover"
+            eager={priority}
           />
         </div>
       ) : null}
