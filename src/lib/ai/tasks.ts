@@ -153,7 +153,12 @@ export function generateHeadlines(input: {
       AVOID_TERMS: input.avoidTerms,
     },
     headlineOutputSchema,
-    { temperature: 0.85, maxTokens: 2000 },
+    {
+      temperature: 0.7,
+      maxTokens: 4000,
+      extraSystemPrompt:
+        "Langsung buat dan hasilkan variasi judul dalam format JSON yang diminta. Hindari penalaran internal yang bertele-tele agar respon ringkas dan tepat waktu.",
+    },
   );
 }
 
@@ -231,7 +236,11 @@ export function generateRewriteSynthesis(input: {
     // hundred more. A smaller completion budget is easier for slow or
     // free-tier models to finish within the request timeout than the old
     // 8000, which some providers struggle to allocate in one shot.
-    { temperature: 0.7, maxTokens: 4000 },
+    { 
+      temperature: 0.7, 
+      maxTokens: 4000,
+      extraSystemPrompt: "Pastikan output berupa artikel berkualitas siap posting dengan gaya khas anak muda dan gaya penulisan situs TNG Daily. Kembalikan HANYA JSON valid tanpa teks pengantar, penutup, atau bungkus markdown (seperti ```json). Dilarang menyertakan proses pemikiran (reasoning) di luar format JSON."
+    },
   );
 }
 

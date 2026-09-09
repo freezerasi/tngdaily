@@ -2,6 +2,7 @@ import type {
   AiJobStatus,
   AiKeyStatus,
   AiTaskType,
+  ArticleSchemaType,
   ArticleStatus,
   ContributionStatus,
   DirectoryType,
@@ -90,6 +91,8 @@ export interface ArticleDetail extends ArticleSummary {
   metaDescription: string | null;
   primaryKeyword: string | null;
   secondaryKeywords: string[];
+  /** JSON-LD schema the public page renders for this article. */
+  schemaType: ArticleSchemaType;
   aiProviderUsed: string | null;
   sourceRewriteJobId: string | null;
   sources: ArticleSourceView[];

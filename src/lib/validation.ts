@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   AI_TASK_TYPES,
+  ARTICLE_SCHEMA_TYPES,
   ARTICLE_STATUSES,
   CONTRIBUTION_STATUSES,
   IMAGE_SOURCES,
@@ -159,6 +160,10 @@ export const articleUpsertSchema = z.object({
   metaDescription: z.string().trim().max(320).optional().or(z.literal("")),
   primaryKeyword: z.string().trim().max(120).optional().or(z.literal("")),
   secondaryKeywordsInput: z.string().trim().max(320).optional().or(z.literal("")),
+  schemaType: z
+    .enum(ARTICLE_SCHEMA_TYPES)
+    .catch("NewsArticle")
+    .default("NewsArticle"),
 });
 export type ArticleUpsertValues = z.input<typeof articleUpsertSchema>;
 export type ArticleUpsertPayload = z.output<typeof articleUpsertSchema>;

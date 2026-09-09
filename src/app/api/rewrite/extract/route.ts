@@ -22,7 +22,23 @@ export const maxDuration = 60;
  * `rewrite_jobs` row is the audit trail for what was fetched.
  */
 export async function POST(request: NextRequest) {
-  const auth = await getApiAuth("editor");
+  let auth;
+  try {
+    auth = await getApiAuth("editor");
+  } catch (caught) {
+    // A Supabase network hiccup must not crash the handler into an empty 500
+    // body: return a readable message the editor can act on.
+    console.error("rewrite extract: auth check failed:", caught);
+    return NextResponse.json(
+      {
+        error:
+          caught instanceof Error
+            ? `Sesi tidak bisa diverifikasi: ${caught.message}. Coba lagi sebentar.`
+            : "Sesi tidak bisa diverifikasi. Login ulang lalu coba lagi.",
+      },
+      { status: 503 },
+    );
+  }
   if (!auth) {
     return NextResponse.json({ error: "Tidak diizinkan." }, { status: 403 });
   }
@@ -107,6 +123,7 @@ export async function POST(request: NextRequest) {
       wordCount: source.wordCount,
       // A short preview only: the full text stays server-side in the job row.
       preview: source.text.slice(0, 600),
+      fullText: source.text,
       error: source.error,
     })),
     successCount: succeeded.length,

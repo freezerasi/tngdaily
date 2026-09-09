@@ -35,7 +35,7 @@ import type { AiTaskType } from "@/types/domain";
  * Never logs an API key, an Authorization header, or a provider body.
  */
 
-const REQUEST_TIMEOUT_MS = 75_000;
+const REQUEST_TIMEOUT_MS = 120_000;
 /**
  * Long-form tasks legitimately need more time than a chat-sized request: a
  * 700+ word article with an attribution map can exceed 75 seconds on slower
@@ -433,7 +433,12 @@ async function markKey(
 // ---------------------------------------------------------------------------
 
 interface ChatCompletionResponse {
-  choices?: Array<{ message?: { content?: string | null } }>;
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+      reasoning_content?: string | null;
+    };
+  }>;
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -458,6 +463,10 @@ function normaliseModelsUrl(baseUrl: string): string {
   return `${trimmed}/v1/models`;
 }
 
+function isGlmModel(model: string): boolean {
+  return /(?:^|[/:_-])glm(?:[-_]|$)/i.test(model);
+}
+
 async function callOnce(
   candidate: GatewayCandidate,
   apiKey: string,
@@ -472,6 +481,8 @@ async function callOnce(
   const startedAt = Date.now();
 
   try {
+    const model = request.model ?? candidate.model;
+    const structuredGlmRequest = request.responseFormatJson && isGlmModel(model);
     const response = await fetch(normaliseBaseUrl(candidate.baseUrl), {
       method: "POST",
       signal: controller.signal,
@@ -480,16 +491,21 @@ async function callOnce(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: request.model ?? candidate.model,
+        model,
         messages: [
           { role: "system", content: request.systemPrompt },
           { role: "user", content: request.userPrompt },
         ],
         temperature: request.temperature ?? 0.7,
         max_tokens: request.maxTokens ?? 4000,
-        ...(request.responseFormatJson
+        ...(request.responseFormatJson &&
+        !structuredGlmRequest
           ? { response_format: { type: "json_object" } }
           : {}),
+        // GLM exposes internal reasoning separately from the final assistant
+        // answer. Structured tasks need that final `content` to be JSON, so
+        // keep thinking disabled rather than accepting reasoning as output.
+        ...(structuredGlmRequest ? { thinking: { type: "disabled" } } : {}),
         stream: false,
       }),
     });
@@ -504,7 +520,8 @@ async function callOnce(
     }
 
     const payload = (await response.json()) as ChatCompletionResponse;
-    const content = payload.choices?.[0]?.message?.content ?? "";
+    const message = payload.choices?.[0]?.message;
+    const content = message?.content?.trim() ?? "";
 
     if (!content.trim()) {
       return {
@@ -515,7 +532,9 @@ async function callOnce(
           keyStatus: null,
           statusCode: response.status,
           code: "empty_response",
-          message: "Provider mengembalikan respons kosong.",
+          message: message?.reasoning_content?.trim()
+            ? "Provider hanya mengembalikan reasoning tanpa output akhir."
+            : "Provider mengembalikan respons kosong.",
           retryable: true,
         },
       };

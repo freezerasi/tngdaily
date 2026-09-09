@@ -11,6 +11,7 @@ import {
   Clock,
   Eye,
   Loader2,
+  Plus,
   Save,
   Trash2,
   TriangleAlert,
@@ -32,12 +33,16 @@ import {
 import { BannerPanel } from "@/components/shared/banner-panel";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Label, Textarea } from "@/components/ui/field";
-import { MarkdownEditor } from "@/components/editor/markdown-editor";
+import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { ImagePicker, type PickedImage } from "@/components/editor/image-picker";
+import { AiAssistant } from "@/components/ai/ai-assistant";
 import { ArticleStatusMark } from "@/components/admin/article-status-mark";
 import { TapePatch } from "@/components/shared/tape-patch";
 import { ArticlePreview } from "@/components/admin/article-preview";
 import { SourcePanel } from "@/components/admin/source-panel";
+import {
+  assistantRegenerateSectionAction,
+} from "@/app/(admin)/admin/(dashboard)/assistant-actions";
 import {
   publishArticleAction,
   saveArticleAction,
@@ -47,7 +52,13 @@ import { articleUpsertSchema, type ArticleUpsertValues } from "@/lib/validation"
 import { slugify } from "@/lib/content";
 import { toDateTimeLocalValue } from "@/lib/dates";
 import type { ArticleDetail, ArticleSourceView } from "@/lib/data/types";
-import { PILLARS, PILLAR_META } from "@/types/domain";
+import {
+  ARTICLE_SCHEMA_META,
+  ARTICLE_SCHEMA_TYPES,
+  PILLARS,
+  PILLAR_META,
+  type ArticleSchemaType,
+} from "@/types/domain";
 import { cn } from "@/lib/utils";
 
 /**
@@ -95,6 +106,9 @@ export function ArticleEditor({
   const [coverAttribution, setCoverAttribution] = React.useState<string | null>(
     article?.coverImageCredit ?? null,
   );
+  const [schemaChoice, setSchemaChoice] = React.useState<ArticleSchemaType>(
+    article?.schemaType ?? "NewsArticle",
+  );
 
   const {
     register,
@@ -130,6 +144,7 @@ export function ArticleEditor({
         article?.secondaryKeywords.join(", ") ??
         initialDraft?.secondaryKeywordsInput ??
         "",
+      schemaType: article?.schemaType ?? "NewsArticle",
     },
   });
 
@@ -144,6 +159,7 @@ export function ArticleEditor({
   const seoTitle = useWatch({ control, name: "seoTitle" }) ?? "";
   const dek = useWatch({ control, name: "dek" }) ?? "";
   const pillar = useWatch({ control, name: "pillar" }) ?? "vibes";
+  const tagsInput = useWatch({ control, name: "tagsInput" }) ?? "";
   const watchedAuthorName = useWatch({ control, name: "authorName" }) ?? authorName;
 
   // Auto-slug until the editor edits it, and never for a published article.
@@ -300,6 +316,97 @@ export function ArticleEditor({
     scheduleAutosave();
   };
 
+  /**
+   * Assistant apply: pushes AI results straight into the matching form fields
+   * without a copy-paste round trip. Every touched field is marked dirty so
+   * autosave picks the change up.
+   */
+  const applyAssistant = (payload: {
+    title?: string;
+    markdown?: string;
+    dek?: string;
+    schemaType?: string;
+  }) => {
+    if (payload.title) setValue("title", payload.title, { shouldDirty: true });
+    if (payload.markdown !== undefined) {
+      setValue("contentMarkdown", payload.markdown, { shouldDirty: true });
+    }
+    if (payload.dek !== undefined) {
+      setValue("dek", payload.dek, { shouldDirty: true });
+    }
+    if (payload.schemaType) {
+      const schema = payload.schemaType as ArticleSchemaType;
+      setSchemaChoice(schema);
+      setValue("schemaType", schema, { shouldDirty: true });
+    }
+    scheduleAutosave();
+  };
+
+  const applyAssistantSeo = (payload: {
+    slug?: string;
+    seoTitle?: string;
+    metaDescription?: string;
+    excerpt?: string;
+    primaryKeyword?: string;
+    secondaryKeywords?: string[];
+    tags?: string[];
+    schemaType?: string;
+  }) => {
+    if (payload.slug) {
+      setSlugLocked(true);
+      setValue("slug", payload.slug, { shouldDirty: true });
+    }
+    if (payload.seoTitle) {
+      setValue("seoTitle", payload.seoTitle, { shouldDirty: true });
+    }
+    if (payload.metaDescription) {
+      setValue("metaDescription", payload.metaDescription, { shouldDirty: true });
+    }
+    if (payload.excerpt) {
+      setValue("excerpt", payload.excerpt, { shouldDirty: true });
+    }
+    if (payload.primaryKeyword) {
+      setValue("primaryKeyword", payload.primaryKeyword, { shouldDirty: true });
+    }
+    if (payload.secondaryKeywords) {
+      setValue(
+        "secondaryKeywordsInput",
+        payload.secondaryKeywords.join(", "),
+        { shouldDirty: true },
+      );
+    }
+    if (payload.tags) {
+      setValue("tagsInput", payload.tags.join(", "), { shouldDirty: true });
+    }
+    if (payload.schemaType) {
+      const schema = payload.schemaType as ArticleSchemaType;
+      setSchemaChoice(schema);
+      setValue("schemaType", schema, { shouldDirty: true });
+    }
+    scheduleAutosave();
+  };
+
+  const regenerateSection = async (
+    sectionHeading: string,
+    instruction: string,
+  ) => {
+    try {
+      return await assistantRegenerateSectionAction({
+        title: title || "Tanpa judul",
+        pillar,
+        fullArticleMarkdown: markdown,
+        sectionHeading,
+        instruction,
+      });
+    } catch (caught) {
+      return {
+        ok: false as const,
+        error:
+          caught instanceof Error ? caught.message : "Regenerasi bagian gagal.",
+      };
+    }
+  };
+
   const verificationFlags = (markdown.match(/\[BUTUH VERIFIKASI:/g) ?? []).length;
 
   return (
@@ -371,8 +478,19 @@ export function ArticleEditor({
           </Field>
         </BannerPanel>
 
+        <AiAssistant
+          currentTitle={title}
+          currentPillar={pillar}
+          currentMarkdown={markdown}
+          currentAuthorName={watchedAuthorName}
+          currentTags={tagsInput}
+          onApply={applyAssistant}
+          onApplySeo={applyAssistantSeo}
+          onRegenerateSection={regenerateSection}
+        />
+
         <BannerPanel ink="wall" lift="sm" className="p-3 sm:p-4">
-          <MarkdownEditor
+          <RichTextEditor
             value={markdown}
             onChange={(next) => {
               setValue("contentMarkdown", next, { shouldDirty: true });
@@ -665,6 +783,35 @@ export function ArticleEditor({
               {...register("secondaryKeywordsInput")}
             />
           </Field>
+
+          <Field
+            label="Schema artikel (JSON-LD)"
+            htmlFor="schemaType"
+            hint={ARTICLE_SCHEMA_META[schemaChoice].description}
+          >
+            <select
+              id="schemaType"
+              value={schemaChoice}
+              {...register("schemaType")}
+              onChange={(event) => {
+                const schema = event.target.value as ArticleSchemaType;
+                setSchemaChoice(schema);
+                // Re-set through setValue so the form value and the panel
+                // state stay in sync.
+                setValue("schemaType", schema, {
+                  shouldDirty: true,
+                });
+                scheduleAutosave();
+              }}
+              className="border-2 border-line bg-wall px-2 py-2 text-[0.8125rem] text-white outline-none focus:border-lime"
+            >
+              {ARTICLE_SCHEMA_TYPES.map((type) => (
+                <option key={type} value={type} className="bg-wall text-white">
+                  {ARTICLE_SCHEMA_META[type].label}
+                </option>
+              ))}
+            </select>
+          </Field>
         </BannerPanel>
 
         {article?.generatedByAi ? (
@@ -679,6 +826,22 @@ export function ArticleEditor({
         ) : null}
 
         {articleId && status === "published" ? (
+          <BannerPanel ink="lime" lift="sm" className="grid gap-2 p-3">
+            <h2 className="tng-label text-muted">Artikel sudah tayang</h2>
+            <Button asChild variant="primary" size="md" block>
+              <Link href={`/artikel/${slug}`} target="_blank" rel="noreferrer">
+                <Eye aria-hidden="true" />
+                Lihat artikel
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="md" block>
+              <Link href="/admin/konten/baru">
+                <Plus aria-hidden="true" />
+                Buat artikel baru
+              </Link>
+            </Button>
+          </BannerPanel>
+        ) : articleId ? (
           <Button asChild variant="ghost" size="sm">
             <Link href={`/artikel/${slug}`} target="_blank" rel="noreferrer">
               <Eye aria-hidden="true" />

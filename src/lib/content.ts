@@ -44,6 +44,7 @@ const ALLOWED_TAGS = [
   "hr",
   "strong",
   "em",
+  "u",
   "del",
   "s",
   "blockquote",
@@ -66,7 +67,27 @@ const ALLOWED_TAGS = [
   "th",
   "td",
   "mark",
+  "iframe",
 ];
+
+/** Iframe hosts allowed in the public article renderer: editor embeds only. */
+const EMBED_IFRAME_HOSTS = [
+  "www.youtube-nocookie.com",
+  "www.instagram.com",
+  "platform.twitter.com",
+  "www.tiktok.com",
+  "player.vimeo.com",
+  "open.spotify.com",
+];
+
+function isAllowedEmbedSrc(src: string): boolean {
+  try {
+    const { host, protocol } = new URL(src);
+    return protocol === "https:" && EMBED_IFRAME_HOSTS.includes(host);
+  } catch {
+    return false;
+  }
+}
 
 const sanitizeOptions: sanitizeHtml.IOptions = {
   allowedTags: ALLOWED_TAGS,
@@ -75,10 +96,27 @@ const sanitizeOptions: sanitizeHtml.IOptions = {
     img: ["src", "alt", "title", "width", "height", "loading", "decoding"],
     th: ["colspan", "rowspan", "scope"],
     td: ["colspan", "rowspan"],
+    iframe: [
+      "src",
+      "title",
+      "width",
+      "height",
+      "frameborder",
+      "allow",
+      "allowfullscreen",
+      "loading",
+      "scrolling",
+      "allowtransparency",
+    ],
   },
   allowedSchemes: ["http", "https", "mailto"],
   allowedSchemesByTag: { img: ["https"] },
   allowProtocolRelative: false,
+  // An iframe only survives when its src is an allowlisted embed host.
+  exclusiveFilter: (frame) =>
+    frame.tag === "iframe" &&
+    (typeof frame.attribs?.src !== "string" ||
+      !isAllowedEmbedSrc(frame.attribs.src)),
   transformTags: {
     a: (tagName, attribs) => {
       const href = attribs.href ?? "";

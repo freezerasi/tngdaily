@@ -204,6 +204,101 @@ function htmlToText(html: string): string {
 
 const MAX_TEXT_CHARS = 14_000;
 
+interface JinaReaderItem {
+  url?: string;
+  title?: string;
+  siteName?: string;
+  publishedTime?: string;
+  description?: string;
+  text?: string;
+  content?: string;
+}
+
+/**
+ * Narrows the untyped Jina Reader JSON envelope. Returns null when the
+ * provider signals failure (non-200 code or missing data), so callers never
+ * read fields off an unexpected shape.
+ */
+function parseJinaPayload(json: unknown): JinaReaderItem | null {
+  if (typeof json !== "object" || json === null) return null;
+  const envelope = json as Record<string, unknown>;
+  if (envelope.code !== 200 || typeof envelope.data !== "object" || envelope.data === null) {
+    return null;
+  }
+  const data = envelope.data as Record<string, unknown>;
+  const text = typeof data.text === "string" ? data.text : undefined;
+  const content = typeof data.content === "string" ? data.content : undefined;
+  if (!text && !content) return null;
+  const str = (value: unknown): string | undefined =>
+    typeof value === "string" ? value : undefined;
+  return {
+    url: str(data.url),
+    title: str(data.title),
+    siteName: str(data.siteName),
+    publishedTime: str(data.publishedTime),
+    description: str(data.description),
+    text,
+    content,
+  };
+}
+
+async function extractWithJina(url: string, base: ExtractedSource): Promise<ExtractedSource> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS * 2);
+
+  try {
+    const response = await fetch(`https://r.jina.ai/${url}`, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      return { ...base, error: `Fallback Jina Reader mengembalikan status ${response.status}.` };
+    }
+
+    const json: unknown = await response.json();
+    const item = parseJinaPayload(json);
+    if (!item) {
+      return { ...base, error: "Jina Reader gagal mengekstrak konten." };
+    }
+    const rawText = (item.text || item.content || "").trim();
+    const text = rawText.slice(0, MAX_TEXT_CHARS);
+    const wordCount = text.split(/\s+/).filter(Boolean).length;
+
+    if (wordCount < 80) {
+      return {
+        ...base,
+        finalUrl: item.url || base.finalUrl,
+        title: item.title || base.title,
+        siteName: item.siteName || base.siteName,
+        error: "Teks yang diekstrak melalui fallback terlalu pendek.",
+      };
+    }
+
+    return {
+      url: base.url,
+      finalUrl: item.url || base.finalUrl,
+      ok: true,
+      siteName: item.siteName || base.siteName,
+      title: item.title || base.title,
+      byline: base.byline,
+      publishedTime: item.publishedTime || base.publishedTime,
+      excerpt: item.description || base.excerpt,
+      text,
+      wordCount,
+      error: null,
+    };
+  } catch {
+    return { ...base, error: "Gagal menggunakan fallback Jina Reader." };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+
 export async function extractSource(rawUrl: string): Promise<ExtractedSource> {
   const base: ExtractedSource = {
     url: rawUrl,
@@ -220,7 +315,10 @@ export async function extractSource(rawUrl: string): Promise<ExtractedSource> {
   };
 
   const fetched = await fetchWithGuards(rawUrl);
-  if (!fetched.ok) return { ...base, error: fetched.error };
+  if (!fetched.ok) {
+    // If standard fetch fails (403, 401, timeout, etc.), fallback to Jina
+    return extractWithJina(rawUrl, base);
+  }
 
   try {
     // Silence jsdom's CSS/JS parse noise: the page is data, not a runtime.
@@ -249,25 +347,21 @@ export async function extractSource(rawUrl: string): Promise<ExtractedSource> {
     dom.window.close();
 
     if (!parsed?.content) {
-      return {
+      return extractWithJina(rawUrl, {
         ...base,
         finalUrl: fetched.finalUrl,
-        error:
-          "Isi utama tidak bisa diekstrak. Halaman mungkin dirender lewat JavaScript atau diproteksi.",
-      };
+      });
     }
 
     const text = htmlToText(parsed.content).slice(0, MAX_TEXT_CHARS);
     const wordCount = text.split(/\s+/).filter(Boolean).length;
 
     if (wordCount < 80) {
-      return {
+      return extractWithJina(rawUrl, {
         ...base,
         finalUrl: fetched.finalUrl,
         title: parsed.title ?? null,
-        error:
-          "Teks yang berhasil diekstrak terlalu pendek untuk dipakai sebagai sumber.",
-      };
+      });
     }
 
     return {
@@ -284,11 +378,10 @@ export async function extractSource(rawUrl: string): Promise<ExtractedSource> {
       error: null,
     };
   } catch {
-    return {
+    return extractWithJina(rawUrl, {
       ...base,
       finalUrl: fetched.finalUrl,
-      error: "Gagal memproses HTML sumber.",
-    };
+    });
   }
 }
 

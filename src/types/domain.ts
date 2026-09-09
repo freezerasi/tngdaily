@@ -136,6 +136,70 @@ export const REWRITE_JOB_STATUSES = [
 ] as const;
 export type RewriteJobStatus = (typeof REWRITE_JOB_STATUSES)[number];
 
+/**
+ * JSON-LD schema types the public article page can render. The editor picks
+ * one per article; the AI assistant only recommends. `NewsArticle` is the
+ * site default and the safest fit for time-bound reporting.
+ */
+export const ARTICLE_SCHEMA_TYPES = [
+  "NewsArticle",
+  "Article",
+  "ReportageNewsArticle",
+  "OpinionNewsArticle",
+  "AnalysisNewsArticle",
+  "ReviewArticle",
+  "HowTo",
+  "FAQPage",
+] as const;
+export type ArticleSchemaType = (typeof ARTICLE_SCHEMA_TYPES)[number];
+
+export const ARTICLE_SCHEMA_META: Record<
+  ArticleSchemaType,
+  { label: string; description: string }
+> = {
+  NewsArticle: {
+    label: "NewsArticle",
+    description: "Berita atau liputan ber waktu. Pilihan default untuk reportase.",
+  },
+  Article: {
+    label: "Article",
+    description: "Artikel evergreen tanpa ikatan waktu kuat, misal panduan atau konten rasa.",
+  },
+  ReportageNewsArticle: {
+    label: "ReportageNewsArticle",
+    description: "Laporan lapangan mendalam dengan pengamatan langsung.",
+  },
+  OpinionNewsArticle: {
+    label: "OpinionNewsArticle",
+    description: "Opini, kolom, atau sudut pandang penulis.",
+  },
+  AnalysisNewsArticle: {
+    label: "AnalysisNewsArticle",
+    description: "Bedah isu dengan latar dan implikasi, bukan laporan kejadian.",
+  },
+  ReviewArticle: {
+    label: "ReviewArticle",
+    description: "Ulasan tempat, produk, atau layanan.",
+  },
+  HowTo: {
+    label: "HowTo",
+    description: "Panduan langkah demi langkah.",
+  },
+  FAQPage: {
+    label: "FAQPage",
+    description: "Format tanya-jawab untuk kueri pencarian spesifik.",
+  },
+};
+
+export function isArticleSchemaType(
+  value: unknown,
+): value is ArticleSchemaType {
+  return (
+    typeof value === "string" &&
+    (ARTICLE_SCHEMA_TYPES as readonly string[]).includes(value)
+  );
+}
+
 export const DIRECTORY_TYPES = ["loker", "umkm", "kos", "event"] as const;
 export type DirectoryType = (typeof DIRECTORY_TYPES)[number];
 

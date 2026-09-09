@@ -113,6 +113,9 @@ function toDetail(input: DemoArticleInput): ArticleDetail {
     metaDescription: input.metaDescription,
     primaryKeyword: input.primaryKeyword,
     secondaryKeywords: input.secondaryKeywords,
+    // Demo fixtures always map to the default schema; the editor never sees
+    // them outside the unconfigured environment.
+    schemaType: "NewsArticle",
     aiProviderUsed: null,
     sourceRewriteJobId: null,
     sources: (input.sources ?? []).map((source, index) => ({

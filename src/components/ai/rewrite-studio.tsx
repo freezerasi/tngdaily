@@ -21,6 +21,13 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { TapePatch } from "@/components/shared/tape-patch";
 import { StageRail, type StageState } from "@/components/ai/stage-rail";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogBody,
+} from "@/components/ui/dialog";
 import type { RewriteOutput } from "@/lib/ai/schemas";
 import { PILLARS, PILLAR_META, type Pillar } from "@/types/domain";
 import { cn } from "@/lib/utils";
@@ -45,6 +52,7 @@ interface ExtractedPreview {
   excerpt: string | null;
   wordCount: number;
   preview: string;
+  fullText?: string;
   error: string | null;
 }
 
@@ -96,6 +104,8 @@ export function RewriteStudio() {
   } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [current, setCurrent] = React.useState<StageKey>("sources");
+
+  const [previewItem, setPreviewItem] = React.useState<ExtractedPreview | null>(null);
 
   const successCount = extracted?.filter((source) => source.ok).length ?? 0;
 
@@ -358,6 +368,16 @@ export function RewriteStudio() {
                           {source.wordCount} kata
                         </span>
                       ) : null}
+                      {source.ok && source.fullText ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ml-2 h-6 px-2 text-[0.6875rem]"
+                          onClick={() => setPreviewItem(source)}
+                        >
+                          Preview Artikel
+                        </Button>
+                      ) : null}
                     </div>
 
                     {source.title ? (
@@ -409,6 +429,24 @@ export function RewriteStudio() {
               Lanjut ke brief
             </Button>
           ) : null}
+
+          <Dialog
+            open={!!previewItem}
+            onOpenChange={(open) => {
+              if (!open) setPreviewItem(null);
+            }}
+          >
+            <DialogContent size="lg">
+              <DialogHeader>
+                <DialogTitle>{previewItem?.title ?? "Preview Artikel"}</DialogTitle>
+              </DialogHeader>
+              <DialogBody>
+                <pre className="whitespace-pre-wrap font-mono text-[0.8125rem] leading-relaxed text-foreground">
+                  {previewItem?.fullText}
+                </pre>
+              </DialogBody>
+            </DialogContent>
+          </Dialog>
         </BannerPanel>
       ) : null}
 

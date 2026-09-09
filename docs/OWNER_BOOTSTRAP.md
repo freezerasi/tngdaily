@@ -43,7 +43,7 @@ through the normal Supabase auth flow, then calls the dedicated narrow RPC
 Direct client INSERT into `public.user_roles` remains strictly forbidden by
 table privileges and RLS. Normal role changes use the narrow RPCs.
 
-### How It Works
+### How Primary Bootstrap Works
 
 1. The authenticated user calls `public.tng_bootstrap_authenticated_first_owner()`.
 2. The function takes **no arguments**; target identity is derived strictly from `auth.uid()`.
@@ -84,7 +84,7 @@ table privileges and RLS. Normal role changes use the narrow RPCs.
   - `unique_violation` (`23505`): Target user already holds an owner row.
   - `internal_error` (`XX000`): Audit writer failed or returned no audit ID.
 
-### Step-by-Step
+### Primary Path Step-by-Step
 
 ```typescript
 // Invoked from a server action / route handler using authenticated user cookies:
@@ -137,7 +137,7 @@ PostgREST.
 This function must never be called from a migration, a server action, a cron
 job, a webhook, or a DAL helper.
 
-### How It Works
+### How Break-Glass Works
 
 `tng_emergency_bootstrap_first_owner(target_user_id uuid)` performs:
 
@@ -154,7 +154,7 @@ job, a webhook, or a DAL helper.
 10. Aborts the entire transaction if the audit write returns no row ID.
 11. Returns the audit log ID as the receipt.
 
-### Step-by-Step
+### Break-Glass Step-by-Step
 
 ```sql
 -- Connect as the DATABASE OWNER (not service_role, not authenticated).
@@ -197,7 +197,7 @@ select r.key, ur.user_id, ur.assigned_by, ur.expires_at
 The break-glass procedure writes exactly one audit event:
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | `actor_id` | `NULL` |
 | `action` | `'auth.owner_bootstrapped'` |
 | `entity_type` | `'user_role'` |

@@ -14,6 +14,11 @@ const eslintConfig = [
       ".impeccable/**",
       ".agents/**",
       ".claude/**",
+      // Tool-vendored working directories (GSD runtime, CLIs): not project
+      // source, same rationale as .agents/.claude above.
+      ".kilo/**",
+      ".codex/**",
+      ".playwright-cli/**",
       "scripts/**/*.js",
       "scripts/**/*.mjs",
     ],

@@ -41,7 +41,7 @@ it actually needs, through paths it is designed to use.
 ### Tables With Revoked Direct Mutation
 
 | Table | What's Revoked | Why | Write Path |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `audit_logs` | INSERT, UPDATE, DELETE | All writes go through `tng_write_audit_log` (SECURITY DEFINER) which derives `actor_id` from `auth.uid()` and scrubs sensitive keys | `tng_write_audit_log()` |
 | `ai_api_keys` | INSERT, UPDATE, DELETE | API keys are managed through the DAL; no PostgREST path should directly mutate this table | DAL functions (server-side only) |
 | `user_roles` | INSERT, UPDATE, DELETE | Normal role mutations route exclusively through narrow `SECURITY DEFINER` RPCs. `service_role` has **NO EXECUTE** on these RPCs. The DAL must act as an `authenticated` user client to manage roles. The `user_roles` table uses `NO FORCE ROW LEVEL SECURITY`, but because direct DML grants are revoked, no application role (including `service_role`) can bypass the RPC. | `tng_assign_role()`, `tng_update_role_expiry()`, `tng_revoke_role()` |
@@ -54,7 +54,7 @@ non-superuser connection that somehow gets table-owner privileges is still
 gated. *(Note: `user_roles` deliberately uses `NO FORCE ROW LEVEL SECURITY` because its table privileges are entirely revoked, see above).*
 
 | Table | Set In |
-|---|---|
+| --- | --- |
 | `role_permissions` | 0008 |
 | `audit_logs` | 0008 |
 | `invitations` | 0008 |
@@ -65,7 +65,7 @@ gated. *(Note: `user_roles` deliberately uses `NO FORCE ROW LEVEL SECURITY` beca
 These tables are not accessible to unauthenticated users at all:
 
 | Table | Set In |
-|---|---|
+| --- | --- |
 | `audit_logs` | 0008 |
 | `role_permissions` | 0008 |
 | `user_roles` | 0008 |
@@ -75,7 +75,7 @@ These tables are not accessible to unauthenticated users at all:
 ### Column-Level Revokes
 
 | Table | Column | Revoked From | Set In |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `invitations` | `token_hash` | `anon`, `authenticated` | 0008 |
 
 ---
@@ -110,7 +110,7 @@ logging).
 ## Migration References
 
 | Migration | Confinement Actions |
-|---|---|
+| --- | --- |
 | `0005_rls.sql` | `FORCE RLS` on `ai_api_keys` |
 | `0008_rbac_foundation.sql` | `FORCE RLS` on `user_roles` (removed in 0015), `role_permissions`, `audit_logs`, `invitations`; revoke all from `anon` on authorization tables |
 | `0009_authorization_helpers.sql` | Revoke INSERT/UPDATE/DELETE on `audit_logs` from `anon`, `authenticated`; break-glass execute revoked from all application roles |

@@ -171,7 +171,7 @@ export function articleMetadata(article: ArticleDetail): Metadata {
 }
 
 /**
- * NewsArticle JSON-LD.
+ * Article JSON-LD with the editor-chosen schema type.
  *
  * Returns null for mock content: a structured-data graph is a machine-readable
  * assertion that this article exists as reporting, and a development fixture
@@ -190,7 +190,9 @@ export function newsArticleJsonLd(
 
   return {
     "@context": "https://schema.org",
-    "@type": "NewsArticle",
+    // The editor picks the type per article (migration 0017); NewsArticle is
+    // the stored default and the safe fit for time-bound reporting.
+    "@type": article.schemaType,
     "@id": `${url}#article`,
     headline: truncate(article.title, 110),
     description: article.metaDescription ?? article.dek ?? article.excerpt ?? undefined,

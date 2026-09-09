@@ -579,3 +579,165 @@
   padding: 0.05em 0.3em;
   font-weight: 700;
 }
+
+/* Embedded media: iframes sit inside a bordered figure-like block so they
+ * never bleed past the article column on small screens. */
+.tng-prose iframe,
+.tng-wysiwyg iframe {
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  border: 2px solid var(--color-keyline);
+  background: var(--color-wall-deep);
+}
+
+.tng-wysiwyg iframe[src*="instagram"],
+.tng-wysiwyg iframe[src*="tiktok"],
+.tng-prose iframe[src*="instagram"],
+.tng-prose iframe[src*="tiktok"] {
+  aspect-ratio: auto;
+  max-height: 640px;
+}
+
+/* ---------------------------------------------------------------------------
+ * WYSIWYG editor surface: the same look as the public prose, but with editing
+ * affordances (selection highlight, table controls, caret visibility).
+ * ------------------------------------------------------------------------- */
+.tng-wysiwyg:focus {
+  border-color: var(--color-lime);
+}
+
+.tng-wysiwyg ::selection {
+  background: var(--color-lime);
+  color: var(--color-ink);
+}
+
+.tng-wysiwyg > * + * {
+  margin-top: 1em;
+}
+
+.tng-wysiwyg h2,
+.tng-wysiwyg h3,
+.tng-wysiwyg h4 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: 85%;
+  line-height: 1.15;
+  margin-top: 1.6em;
+}
+
+.tng-wysiwyg h2 {
+  font-size: 1.375rem;
+  border-top: 2px solid var(--color-line);
+  padding-top: 0.6em;
+}
+
+.tng-wysiwyg h3 {
+  font-size: 1.1875rem;
+  font-weight: 700;
+}
+
+.tng-wysiwyg h4 {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tng-wysiwyg ul,
+.tng-wysiwyg ol {
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.tng-wysiwyg ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.tng-wysiwyg ul > li {
+  position: relative;
+  padding-left: 1.35rem;
+}
+
+.tng-wysiwyg ul > li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 0.45rem;
+  height: 0.45rem;
+  border: 1px solid var(--color-keyline);
+}
+
+.tng-wysiwyg ol {
+  list-style: decimal;
+}
+
+.tng-wysiwyg blockquote {
+  border: 2px solid var(--color-keyline);
+  box-shadow: var(--shadow-hard-sm);
+  background: var(--color-bone);
+  padding: 0.85rem 1rem;
+}
+
+.tng-wysiwyg blockquote p {
+  margin: 0;
+}
+
+.tng-wysiwyg img {
+  border: 2px solid var(--color-keyline);
+  box-shadow: var(--shadow-hard-sm);
+  max-width: 100%;
+  height: auto;
+}
+
+.tng-wysiwyg table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.tng-wysiwyg th,
+.tng-wysiwyg td {
+  border: 1px solid var(--color-line);
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  position: relative;
+}
+
+.tng-wysiwyg th {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.75rem;
+  background: var(--color-surface-strong);
+}
+
+.tng-wysiwyg .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--color-lime) 35%, transparent);
+  pointer-events: none;
+}
+
+.tng-wysiwyg .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background: var(--color-lime);
+  cursor: col-resize;
+}
+
+.tng-wysiwyg p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--color-muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

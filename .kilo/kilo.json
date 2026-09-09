@@ -1,0 +1,11 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "permission": {
+    "read": {
+      "C:/Users/Athira/Desktop/tngdaily/.kilo/gsd-core/*": "allow"
+    },
+    "external_directory": {
+      "C:/Users/Athira/Desktop/tngdaily/.kilo/gsd-core/*": "allow"
+    }
+  }
+}

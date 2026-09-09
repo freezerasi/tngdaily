@@ -69,7 +69,11 @@ async function main() {
       "Production code selects Vault automatically, but explicit env prevents operator confusion.",
     ),
     check(
-      hasValue("CLOUDINARY_CLOUD_NAME") &&
+      // Mirrors src/lib/env.ts: the cloud name also resolves from the
+      // NEXT_PUBLIC_ variant used for delivery URLs, and the folder keeps
+      // accepting the legacy CLOUDINARY_FOLDER name.
+      (hasValue("CLOUDINARY_CLOUD_NAME") ||
+        hasValue("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME")) &&
         hasValue("CLOUDINARY_API_KEY") &&
         hasValue("CLOUDINARY_API_SECRET"),
       "recommended",

@@ -19,7 +19,7 @@ policy.
 ## Legend
 
 | Symbol | Meaning |
-|---|---|
+| --- | --- |
 | 🔄 | Renamed from legacy policy |
 | ➕ | New policy (no legacy equivalent) |
 | ✂️ | Legacy policy split into multiple policies |
@@ -32,7 +32,7 @@ policy.
 ### `profiles_select_self` 🔄
 
 | | Legacy (0005) | New (0011) |
-|---|---|---|
+| --- | --- | --- |
 | **Operation** | SELECT | SELECT |
 | **Target role** | `authenticated` | `authenticated` |
 | **Predicate** | `id = auth.uid() OR tng_is_editor()` | `id = auth.uid() OR tng_has_permission('article.read_all')` |
@@ -45,7 +45,7 @@ specific permission that actually requires profile visibility.
 ### `profiles_update_self` 🔄
 
 | | Legacy (0005) | New (0011) |
-|---|---|---|
+| --- | --- | --- |
 | **Operation** | UPDATE | UPDATE |
 | **Target role** | `authenticated` | `authenticated` |
 | **USING** | `id = auth.uid()` | `id = auth.uid()` |
@@ -60,7 +60,7 @@ escalation triggers.
 ### `profiles_suspend` ➕
 
 | | New (0011) |
-|---|---|
+| --- | --- |
 | **Operation** | UPDATE |
 | **Target role** | `authenticated` |
 | **Predicate** | `tng_has_permission('user.suspend')` |
@@ -72,7 +72,7 @@ the default matrix (privileged permission).
 ### `profiles_owner_delete` ➕
 
 | | New (0011) |
-|---|---|
+| --- | --- |
 | **Operation** | DELETE |
 | **Target role** | `authenticated` |
 | **Predicate** | `tng_is_owner()` |
@@ -92,7 +92,7 @@ Dropped. Replaced by `profiles_suspend` (update) and `profiles_owner_delete`
 ### `articles_public_read` 🔄
 
 | | Legacy (0005) | New (0011) |
-|---|---|---|
+| --- | --- | --- |
 | **Operation** | SELECT | SELECT |
 | **Target role** | `anon, authenticated` | `anon, authenticated` |
 | **Predicate** | `status = 'published' AND published_at IS NOT NULL AND published_at <= now()` | `tng_is_publicly_publishable(id)` |
@@ -106,7 +106,7 @@ eligibility.
 ### `articles_internal_read` 🔄
 
 | | Legacy (0005) | New (0011) |
-|---|---|---|
+| --- | --- | --- |
 | **Legacy name** | `articles_editor_read` | `articles_internal_read` |
 | **Predicate** | `tng_is_editor() OR author_id = auth.uid()` | `deleted_at IS NULL AND (tng_has_permission('article.read_all') OR author_id = auth.uid())` |
 
@@ -117,7 +117,7 @@ invisible to everyone except the owner (who can hard-delete).
 ### `articles_create` 🔄
 
 | | Legacy (0005) | New (0011) |
-|---|---|---|
+| --- | --- | --- |
 | **Legacy name** | `articles_editor_insert` | `articles_create` |
 | **Predicate** | `tng_is_editor()` | `(tng_has_permission('article.create_own') AND author_id = auth.uid()) OR tng_has_permission('article.edit_all')` |
 
@@ -128,7 +128,7 @@ others. Previously any editor-or-above could insert.
 ### `articles_update` 🔄
 
 | | Legacy (0005) | New (0011) |
-|---|---|---|
+| --- | --- | --- |
 | **Legacy name** | `articles_editor_update` | `articles_update` |
 | **USING** | `tng_is_editor()` | `deleted_at IS NULL AND (tng_has_permission('article.edit_all') OR (tng_has_permission('article.edit_own') AND author_id = auth.uid() AND status IN ('draft', 'needs_review')))` |
 | **WITH CHECK** | `tng_is_editor()` | `tng_has_permission('article.edit_all') OR (tng_has_permission('article.edit_own') AND author_id = auth.uid())` |
@@ -140,7 +140,7 @@ further guarded by `tng_guard_article_status` trigger.
 ### `articles_owner_delete` 🔄
 
 | | Legacy (0005) | New (0011) |
-|---|---|---|
+| --- | --- | --- |
 | **Legacy name** | `articles_admin_delete` | `articles_owner_delete` |
 | **Predicate** | `tng_is_admin()` | `tng_is_owner()` |
 
@@ -154,7 +154,7 @@ through the update policy.
 ### `article_sources_public_read` 🔄
 
 | | Legacy | New |
-|---|---|---|
+| --- | --- | --- |
 | **Predicate** | Published article join | `tng_is_publicly_publishable(article_id)` |
 
 **Intent**: Same semantics, delegates to the unified public gate.
@@ -162,7 +162,7 @@ through the update policy.
 ### `article_sources_internal_read` 🔄
 
 | | Legacy | New |
-|---|---|---|
+| --- | --- | --- |
 | **Legacy name** | `article_sources_editor_all` (SELECT part) | `article_sources_internal_read` |
 | **Predicate** | `tng_is_editor()` | `tng_has_permission('article.read_all') OR author owns the parent article` |
 
@@ -172,7 +172,7 @@ authors who don't have `article.read_all`.
 ### `article_sources_write` ✂️
 
 | | New |
-|---|---|
+| --- | --- |
 | **Operation** | ALL (insert/update/delete) |
 | **Predicate** | `tng_has_permission('article.edit_all') OR (tng_has_permission('article.edit_own') AND author owns article)` |
 
@@ -186,7 +186,7 @@ on their own articles.
 ### `article_images_public_read` 🔄
 
 | | Legacy | New |
-|---|---|---|
+| --- | --- | --- |
 | **Predicate** | Published article join | `tng_is_public_media(id) AND tng_is_publicly_publishable(article_id)` |
 
 **Intent**: Two independent gates. The asset must itself be public-eligible
@@ -197,7 +197,7 @@ eligibility never implies media eligibility.
 ### `article_images_internal_read` 🔄
 
 | | Legacy | New |
-|---|---|---|
+| --- | --- | --- |
 | **Legacy name** | `article_images_editor_all` (SELECT part) | `article_images_internal_read` |
 | **Predicate** | `tng_is_editor()` | `tng_has_any_permission(ARRAY['media.edit_metadata', 'article.read_all'])` |
 
@@ -206,17 +206,17 @@ eligibility never implies media eligibility.
 ### `article_images_write` ✂️ (INSERT)
 
 | Predicate | `tng_has_permission('media.upload')` |
-|---|---|
+| --- | --- |
 
 ### `article_images_update` ✂️ (UPDATE)
 
 | Predicate | `tng_has_permission('media.edit_metadata')` |
-|---|---|
+| --- | --- |
 
 ### `article_images_delete` ✂️ (DELETE)
 
 | Predicate | `tng_has_permission('media.delete_any') OR (tng_has_permission('media.delete_own') AND created_by = auth.uid())` |
-|---|---|
+| --- | --- |
 
 **Intent**: The single `editor_all` blanket was split into four operation-specific
 policies with distinct permissions. Media manager role can curate assets without
@@ -229,7 +229,7 @@ any article capability.
 ### `reactions_public_insert` 🔄
 
 | | Legacy | New |
-|---|---|---|
+| --- | --- | --- |
 | **Predicate** | Published article check | `tng_is_publicly_publishable(article_id)` |
 
 **Intent**: Uses the unified public gate so mock/unlisted/non-production articles
@@ -238,7 +238,7 @@ cannot accumulate reactions.
 ### `reactions_analytics_read` 🔄
 
 | | Legacy | New |
-|---|---|---|
+| --- | --- | --- |
 | **Legacy name** | `reactions_editor_read` | `reactions_analytics_read` |
 | **Predicate** | `tng_is_editor()` | `tng_has_permission('analytics.read')` |
 
@@ -252,19 +252,19 @@ appropriate permission.
 ### `contributions_read` 🔄
 
 | Legacy name | `contributions_editor_read` |
-|---|---|
+| --- | --- |
 | **Predicate** | `tng_has_permission('community.read')` |
 
 ### `contributions_moderate` 🔄
 
 | Legacy name | `contributions_editor_update` |
-|---|---|
+| --- | --- |
 | **Predicate** | `tng_has_permission('community.moderate')` |
 
 ### `contributions_owner_delete` 🔄
 
 | Legacy name | `contributions_admin_delete` |
-|---|---|
+| --- | --- |
 | **Predicate** | `tng_is_owner()` |
 
 **Intent**: Hard delete → owner-only, consistent with the reversible/irreversible
@@ -277,12 +277,12 @@ split applied everywhere.
 ### `directory_public_read` (unchanged)
 
 | **Predicate** | `true` (public read for all) |
-|---|---|
+| --- | --- |
 
 ### `directory_manage` 🔄
 
 | Legacy name | `directory_editor_all` |
-|---|---|
+| --- | --- |
 | **Predicate** | `tng_has_permission('directory.manage')` |
 
 ---
@@ -292,7 +292,7 @@ split applied everywhere.
 ### `ai_providers_owner_all` 🔄
 
 | Legacy name | `ai_providers_admin_all` |
-|---|---|
+| --- | --- |
 | **Predicate** | `tng_is_owner()` |
 
 **Intent**: AI provider configuration is a privileged operation. Moved from
@@ -305,7 +305,7 @@ admin-all to owner-only.
 ### `ai_usage_log_read` 🔄
 
 | Legacy name | `ai_usage_log_admin_read` |
-|---|---|
+| --- | --- |
 | **Predicate** | `tng_has_permission('ai.view_usage')` |
 
 **Intent**: Viewing AI usage is granted to editors and above (and analyst),
@@ -318,7 +318,7 @@ not just admins.
 ### `ai_prompt_templates_read` 🔄
 
 | Legacy name | `ai_prompt_templates_editor_read` |
-|---|---|
+| --- | --- |
 | **Predicate** | `tng_has_any_permission(ARRAY['ai.use_writing', 'ai.use_seo', 'ai.use_research', 'ai.use_image_prompt', 'ai.manage_prompt_library'])` |
 
 **Intent**: Anyone who may use any AI feature needs to read prompt templates.
@@ -326,7 +326,7 @@ not just admins.
 ### `ai_prompt_templates_owner_write` 🔄
 
 | Legacy name | `ai_prompt_templates_admin_write` |
-|---|---|
+| --- | --- |
 | **Predicate** | `tng_has_permission('ai.manage_prompt_library')` |
 
 **Intent**: Activating and modifying prompt templates is owner-only (privileged).
@@ -338,7 +338,7 @@ not just admins.
 ### `ai_generation_jobs_read` 🔄
 
 | Legacy name | `ai_generation_jobs_editor_read` |
-|---|---|
+| --- | --- |
 | **Predicate** | `created_by = auth.uid() OR tng_has_permission('ai.view_usage')` |
 
 **Intent**: Users see their own jobs; staff with `ai.view_usage` see all.
@@ -346,13 +346,13 @@ not just admins.
 ### `ai_generation_jobs_write` 🔄
 
 | Legacy name | `ai_generation_jobs_editor_write` |
-|---|---|
+| --- | --- |
 | **Predicate** | `created_by = auth.uid() AND tng_has_any_permission(ARRAY['ai.use_writing', 'ai.use_seo', 'ai.use_research', 'ai.use_image_prompt'])` |
 
 ### `ai_generation_jobs_update` ➕
 
 | **Predicate** | `created_by = auth.uid()` |
-|---|---|
+| --- | --- |
 
 ---
 
@@ -361,18 +361,18 @@ not just admins.
 ### `rewrite_jobs_read` ✂️
 
 | Legacy name | `rewrite_jobs_editor_all` (SELECT part) |
-|---|---|
+| --- | --- |
 | **Predicate** | `created_by = auth.uid() OR tng_has_permission('ai.view_usage')` |
 
 ### `rewrite_jobs_write` ✂️ (INSERT)
 
 | **Predicate** | `created_by = auth.uid() AND tng_has_permission('ai.use_research')` |
-|---|---|
+| --- | --- |
 
 ### `rewrite_jobs_update` ✂️ (UPDATE)
 
 | **Predicate** | `created_by = auth.uid()` |
-|---|---|
+| --- | --- |
 
 ---
 
@@ -381,12 +381,12 @@ not just admins.
 ### `contributions_bucket_public_read` (unchanged)
 
 | **Predicate** | `bucket_id = 'contributions'` |
-|---|---|
+| --- | --- |
 
 ### `contributions_bucket_write` 🔄
 
 | Legacy name | `contributions_bucket_editor_write` |
-|---|---|
+| --- | --- |
 | **Predicate** | `bucket_id = 'contributions' AND tng_has_any_permission(ARRAY['community.moderate', 'media.upload'])` |
 
 ---
@@ -396,7 +396,7 @@ not just admins.
 These policies govern the authorization tables themselves.
 
 | Table | Policy | Operation | Predicate |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `roles` | `roles_read_authenticated` | SELECT | `true` (all signed-in) |
 | `roles` | `roles_owner_write` | ALL | `tng_is_owner()` |
 | `permissions` | `permissions_read_authenticated` | SELECT | `true` |

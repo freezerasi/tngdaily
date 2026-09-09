@@ -8,7 +8,7 @@ integrasi eksternal terverifikasi sampai batas kontrak, tipe, validasi, dan
 penanganan error, tetapi **tidak** terverifikasi terhadap layanan aslinya. Bagian
 mana yang mana ditandai eksplisit di bawah.
 
-Terakhir diperbarui: 7 September 2026.
+Terakhir diperbarui: 9 September 2026 (verifikasi integrasi end-to-end + perbaikan).
 
 ---
 
@@ -20,11 +20,12 @@ berjalan.
 
 | Verifikasi | Hasil |
 | --- | --- |
-| `npm run lint` | lulus, 0 error 0 warning |
+| `npm run lint` | lulus, 0 error 0 warning (9 Sep 2026: `.kilo/**`, `.codex/**`, `.playwright-cli/**` di-ignore sebagai tooling vendored; `any` + unused var di `src/lib/ai/extract.ts` diperbaiki dengan `parseJinaPayload` + narrowing) |
 | `npm run typecheck` | lulus, TypeScript strict + `noUncheckedIndexedAccess` |
-| `npm run test` | tersedia untuk script operasional; jalankan ulang setelah perubahan ops/deploy |
+| `npm run test` | 32/32 lulus (9 Sep 2026): 3 ops eksisting + 1 gateway-mock eksisting + 28 baru — klasifikasi fallback AI (9), SSRF guard (9), taksonomi/label (6), deploy-readiness (4). Loader `tests/helpers/require-server.mjs` dipakai bersama untuk mengeksekusi source TS server-side di plain Node |
 | `npm run build` | lulus, 27 halaman statis dan seluruh route dinamis ter-generate |
-| `npm run deploy:check` | tersedia; pada environment lokal saat ini gagal sesuai desain karena env Supabase production dan `NEXT_PUBLIC_SITE_URL` production belum ada |
+| `npm run deploy:check` | lulus dengan 0 peringatan pada 9 Sep 2026 (sebelumnya 1 WARN Cloudinary palsu, diperbaiki: script kini menerima fallback `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_FOLDER` seperti `src/lib/env.ts`) |
+| RLS `articles` | **diperbaiki 9 Sep 2026**: RLS sempat nonaktif sehingga anon bisa membaca draft via PostgREST langsung; migration `0018_enable_articles_rls_repair.sql` mengaktifkannya kembali dan anon kini hanya melihat artikel published |
 | `impeccable detect --json src/app src/components` | `[]`, bersih |
 | Smoke test HTTP | 13 route publik 200, `/admin` 307 ke login, slug tak dikenal 404 |
 | Screenshot | 375, 390, 768, 1440 pada feed, artikel, /hustle, kontribusi, login |
@@ -99,16 +100,16 @@ merespons seperti yang diharapkan.
 
 | Fitur | Kondisi | Yang perlu dilakukan untuk memverifikasi |
 | --- | --- | --- |
-| Supabase Auth, RLS, seluruh query | Migration 0001..0015 dan empat migration hardening sudah diterapkan ke project live. `supabase db lint` bersih; owner, function grant, trigger, RLS, dan FK index sudah diverifikasi. Seed konten/prompt belum dijalankan. Script `seed:production` sudah tersedia untuk mengisi prompt wajib tanpa konten demo. | Isi `SUPABASE_DB_URL` atau env PG, jalankan `npm run seed:production`, lalu masukkan artikel editorial produksi. |
-| Login CMS | Owner `liemsteffy@gmail.com` aktif dan `user.manage_roles`/authority rank sudah diverifikasi melalui database. Full browser login dengan kredensial owner belum diulang pada audit ini. | Login sebagai owner di browser dan cek `/admin`, lalu aktifkan MFA sesuai kebijakan operasional. |
-| Upload Cloudinary | Route tanda tangan dan upload langsung dari browser selesai. Belum pernah ada file yang benar-benar terunggah. | Isi kredensial Cloudinary, unggah satu gambar dari editor artikel. |
-| Ingest foto stok | Proxy pencarian, guard host per provider, dan ingest ke Cloudinary selesai. | Isi satu key provider, cari, lalu pilih satu foto. |
-| Gateway AI | Retry, klasifikasi error, fallback berjenjang, logging, timeout, dan validasi Zod selesai. Belum pernah ada panggilan ke provider asli. | Tambah provider dan key di `/admin/ai`, jalankan Test connection. |
-| Content Studio 5 tahap | Wizard, pencatatan job per tahap, version history lewat kolom `revision`, dan regenerate per tahap selesai. | Butuh provider AI aktif. |
-| Rewrite Studio | Ekstraksi multi-URL, decision handling, peta atribusi, dan similarity check n-gram selesai. Ekstraksi HTML sendiri belum diuji terhadap situs berita nyata. | Butuh provider AI aktif, plus uji terhadap beberapa situs berita lokal. |
-| Supabase Vault | Extension `supabase_vault` aktif di project live. Belum ada provider/key AI untuk menguji round-trip secret. | Set `SECRET_STORE_DRIVER=supabase-vault`, tambah provider dan key, lalu jalankan Test connection. |
-| Penjadwalan artikel | Migration `20260907154311_schedule_due_articles_cron.sql` sudah diterapkan ke project live. Extension `pg_cron` aktif dan job `tng-publish-due-articles` aktif setiap 5 menit. | Pantau run history di Supabase Cron setelah ada artikel `scheduled` nyata. |
-| Upload kiriman komunitas | Route memeriksa magic bytes dan ukuran, lalu menulis ke bucket `contributions`. Bucket dibuat oleh migration 0006 yang belum dijalankan. | Apply 0006, coba unggah satu gambar dari `/kontribusi`. |
+| Supabase Auth, RLS, seluruh query | **Terverifikasi live 9 Sep 2026.** Migration 0001..0018 diterapkan. `seed:production:check` lulus (11 prompt template aktif). 1 auth user dengan role Owner. Anon PostgREST hanya membaca artikel published (draft bocor sebelum fix 0018, kini tertutup). | Tambah artikel editorial produksi; hanya pilar `vibes` yang punya konten, pilar lain masih kosong. |
+| Login CMS | Owner `liemsteffy` (1 auth user, role Owner) terverifikasi di database. Full browser login dengan kredensial owner belum diulang pada audit ini. | Login sebagai owner di browser dan cek `/admin`, lalu aktifkan MFA sesuai kebijakan operasional. |
+| Upload Cloudinary | **Terverifikasi live 9 Sep 2026.** 4 baris `article_images` (sumber Pexels) menunjuk ke delivery URL Cloudinary yang merespons HTTP 200 `image/webp`. Signed-upload dari browser belum diuji klik-per-klik. | Di editor artikel, unggah satu gambar langsung dari browser untuk menutup verifikasi signed upload. |
+| Ingest foto stok | **Terverifikasi live 9 Sep 2026.** Unsplash (HTTP 200, kuota 49 tersisa) dan Pexels (HTTP 200) merespons dengan key yang ada. Pixabay belum punya key (opsional). 4 gambar Pexels sudah ter-ingest ke Cloudinary. | Tambah `PIXABAY_API_KEY` bila ingin 3 provider aktif; tidak wajib. |
+| Gateway AI | **Terverifikasi live 9 Sep 2026.** Provider TokenRouter + 1 key aktif; 9 dari 10 panggilan `rewrite` terakhir sukses (latensi 75–179 dtk, model gratis `z-ai/glm-5.3-free`). Kegagalan yang ada berbentuk output non-JSON dari model gratis, ditangani aman oleh gateway (job `failed` + pesan aman). | Tambah provider/key fallback berbayar agar tidak single-point-of-failure; model gratis lambat dan sering gagal validasi schema. Routing per-task (`ai_task_models`) masih kosong — gateway memakai rantai prioritas generik. |
+| Content Studio 5 tahap | Wizard, pencatatan job per tahap, version history lewat kolom `revision`, dan regenerate per tahap selesai. Gateway AI sudah live (lihat di atas). | Uji wizard penuh di browser dengan brief nyata. |
+| Rewrite Studio | Ekstraksi multi-URL, decision handling, peta atribusi, dan similarity check n-gram selesai. **Reaper aktif 9 Sep 2026**: migration `0019_stale_rewrite_job_reaper.sql` (fungsi `tng_fail_stale_rewrite_jobs()` + cron per jam `tng-fail-stale-rewrite-jobs`) otomatis menggagalkan ekstraksi basi >24 jam tanpa menghapus `extracted_content`; baris basi lama sudah dibersihkan. 1 ekstraksi gagal terhadap situs berita lokal (`berita.tangerangselatankota.go.id`: tidak ada URL berhasil diekstrak). | Uji ekstraksi ke beberapa situs berita lokal lain. |
+| Supabase Vault | **Terverifikasi live 9 Sep 2026.** Extension aktif, RPC `tng_vault_{create,read,delete}_secret` ada, dan keberhasilan panggilan gateway membuktikan round-trip read secret berjalan. | Tidak ada aksi tersisa. |
+| Penjadwalan artikel | Migration cron sudah diterapkan. Extension `pg_cron` aktif dan job `tng-publish-due-articles` aktif setiap 5 menit. | Pantau run history di Supabase Cron setelah ada artikel `scheduled` nyata. |
+| Upload kiriman komunitas | Bucket `contributions` (public, batas 5 MB, MIME gambar) sudah ada dari migration 0006. Belum ada objek terunggah (0 objects); antrean moderasi kosong (3 approved, 0 pending). | Coba unggah satu gambar dari `/kontribusi` untuk menutup verifikasi upload. |
 
 ---
 

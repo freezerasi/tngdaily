@@ -74,7 +74,9 @@ const parsed = rawSchema.parse({
     process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY,
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET,
-  CLOUDINARY_UPLOAD_FOLDER: process.env.CLOUDINARY_UPLOAD_FOLDER,
+  // CLOUDINARY_FOLDER is the legacy name kept working for existing .env files.
+  CLOUDINARY_UPLOAD_FOLDER:
+    process.env.CLOUDINARY_UPLOAD_FOLDER ?? process.env.CLOUDINARY_FOLDER,
   UNSPLASH_ACCESS_KEY: process.env.UNSPLASH_ACCESS_KEY,
   PEXELS_API_KEY: process.env.PEXELS_API_KEY,
   PIXABAY_API_KEY: process.env.PIXABAY_API_KEY,

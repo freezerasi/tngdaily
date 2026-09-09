@@ -54,6 +54,8 @@ export interface ArticleRow {
   meta_description: string | null;
   primary_keyword: string | null;
   secondary_keywords: string[] | null;
+  /** JSON-LD schema the public page renders. Added in migration 0017. */
+  schema_type: string | null;
   reading_minutes: number | null;
   generated_by_ai: boolean;
   ai_provider_used: string | null;

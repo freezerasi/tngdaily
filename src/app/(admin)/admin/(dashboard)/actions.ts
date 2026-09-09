@@ -163,6 +163,7 @@ export async function saveArticleAction(
     meta_description: values.metaDescription || null,
     primary_keyword: values.primaryKeyword || null,
     secondary_keywords: parseTagInput(values.secondaryKeywordsInput ?? ""),
+    schema_type: values.schemaType,
     reading_minutes: markdown ? readingMinutes(markdown) : null,
   };
 

@@ -24,7 +24,7 @@ grouping and dashboard grouping only.
 ## Migration Sequence
 
 | Migration | Purpose |
-|---|---|
+| --- | --- |
 | `0008_rbac_foundation.sql` | Tables: `roles`, `permissions`, `role_permissions`, `user_roles`, `audit_logs`, `invitations`, `feature_flags` |
 | `0009_authorization_helpers.sql` | All helper functions, escalation guard, break-glass, audit writer, policies for RBAC tables |
 | `0010_seed_rbac.sql` | 8 system roles, 47 permissions, reconciling matrix, verification assertions |
@@ -34,7 +34,7 @@ grouping and dashboard grouping only.
 
 ## Data Model
 
-```
+```text
 roles (8 system roles)
   â””â”€â”€ role_permissions (composite PK: role_id, permission_id)
         â””â”€â”€ permissions (47 permissions)
@@ -60,7 +60,7 @@ Because `user_roles` has no single-column surrogate key, audit events that
 reference a role assignment use a **deterministic composite string** as
 `entity_id`:
 
-```
+```text
 user_id::text || ':' || role_id::text
 ```
 
@@ -77,7 +77,7 @@ The format is stable and must not be changed without updating every consumer.
 ## System Roles
 
 | Role | `authority_rank` | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `owner` | 100 | System owner. Holds implicit-all semantics in `tng_has_permission`. No explicit `role_permissions` rows. |
 | `managing_editor` | 70 | Editorial publishing authority. No privileged permissions. |
 | `editor` | 50 | Reviews and edits all content, approves. Does not publish. |
@@ -105,7 +105,7 @@ and `commercial_manager` both sit at 50 with disjoint permissions.
 ### 47 Permissions in 10 Groups
 
 | Group | Permissions | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `article` | `create_own`, `edit_own`, `submit_review`, `read_all`, `edit_all`, `review`, `approve`, `publish`, `schedule`, `archive`, `restore` | Core editorial workflow |
 | `media` | `upload`, `edit_metadata`, `delete_own`, `delete_any` | Asset management |
 | `homepage` | `read`, `edit_draft`, `publish`, `schedule` | Homepage curation |
@@ -171,7 +171,7 @@ Two paths exist for assigning the first owner. See
 [OWNER_BOOTSTRAP.md](./OWNER_BOOTSTRAP.md) for the complete runbook.
 
 | Path | When | Actor | Method |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Primary | First deployment, authenticated user | The user themselves | Dedicated RPC `public.tng_bootstrap_authenticated_first_owner()` |
 | Break-glass (`tng_emergency_bootstrap_first_owner`) | All owners lost | Database owner (human operator) | Direct DB connection only |
 
@@ -186,7 +186,7 @@ Append-only. No update or delete policy exists or may be added.
 
 ### Audit Events for Role Management (0015)
 
-Direct `INSERT`/`UPDATE`/`DELETE` on `public.user_roles` is explicitly revoked from `PUBLIC`, `anon`, and `authenticated`. Normal role mutation is exclusively handled through narrow `SECURITY DEFINER` RPCs (`tng_assign_role`, `tng_update_role_expiry`, `tng_revoke_role`). 
+Direct `INSERT`/`UPDATE`/`DELETE` on `public.user_roles` is explicitly revoked from `PUBLIC`, `anon`, and `authenticated`. Normal role mutation is exclusively handled through narrow `SECURITY DEFINER` RPCs (`tng_assign_role`, `tng_update_role_expiry`, `tng_revoke_role`).
 
 **NO FORCE ROW LEVEL SECURITY**: The `user_roles` table uses `NO FORCE ROW LEVEL SECURITY`. Because direct DML grants are revoked, no application role can bypass and mutate the table via PostgREST. This setup cleanly allows the `SECURITY DEFINER` RPCs (running as the table owner) to execute their audited mutations natively without needing a forgeable bypass marker or generic write policies.
 
@@ -212,7 +212,7 @@ The following audit events are written by these RPCs:
 Written via `tng_write_audit_log` with no redundant identity dump:
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | `actor_id` | `auth.uid()` (derived naturally) |
 | `action` | `'auth.owner_bootstrapped'` |
 | `entity_type` | `'user_role'` |
@@ -224,7 +224,7 @@ Written via `tng_write_audit_log` with no redundant identity dump:
 ### Audit Event for Break-Glass Bootstrap
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | `actor_id` | `NULL` â€” no actor override, no fabrication |
 | `action` | `'auth.owner_bootstrapped'` |
 | `entity_type` | `'user_role'` |
@@ -236,7 +236,7 @@ Written via `tng_write_audit_log` with no redundant identity dump:
 Written exclusively via `tng_write_audit_log` with no actor override:
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | `actor_id` | `NULL` (derived naturally from unauthenticated migration context) |
 | `action` | `'rbac.legacy_roles_migrated'` |
 | `entity_type` | `'migration'` |
@@ -251,9 +251,8 @@ any audit event.
 
 ## Related Documentation
 
-- [OWNER_BOOTSTRAP.md](./OWNER_BOOTSTRAP.md) â€” Step-by-step bootstrap runbook
-- [RLS_POLICY_MIGRATION_REVIEW.md](./RLS_POLICY_MIGRATION_REVIEW.md) â€” Policy-by-policy intent review
-- [RLS_TESTING.md](./RLS_TESTING.md) â€” Verification procedure
-- [SERVICE_ROLE_CONFINEMENT.md](./SERVICE_ROLE_CONFINEMENT.md) â€” Service-role API surface
-- [RBAC_FORWARD_REPAIR.md](./RBAC_FORWARD_REPAIR.md) â€” What 0013 does and why
-
+- [OWNER_BOOTSTRAP.md](./OWNER_BOOTSTRAP.md) — Step-by-step bootstrap runbook
+- [RLS_POLICY_MIGRATION_REVIEW.md](./RLS_POLICY_MIGRATION_REVIEW.md) — Policy-by-policy intent review
+- [RLS_TESTING.md](./RLS_TESTING.md) — Verification procedure
+- [SERVICE_ROLE_CONFINEMENT.md](./SERVICE_ROLE_CONFINEMENT.md) — Service-role API surface
+- [RBAC_FORWARD_REPAIR.md](./RBAC_FORWARD_REPAIR.md) — What 0013 does and why

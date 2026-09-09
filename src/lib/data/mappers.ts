@@ -16,6 +16,7 @@ import type {
   ArticleSourceRow,
 } from "@/types/database";
 import {
+  isArticleSchemaType,
   isArticleStatus,
   isMediaSourceType,
   isPillar,
@@ -52,7 +53,7 @@ export const ARTICLE_SUMMARY_COLUMNS = [
   "share_count",
 ].join(", ");
 
-export const ARTICLE_DETAIL_COLUMNS = `${ARTICLE_SUMMARY_COLUMNS}, content_markdown, cover_image_credit, cover_media_source_type, cover_media_credit, cover_media_disclosure, cover_depicts_actual_location, cover_depicts_actual_event, seo_title, meta_description, primary_keyword, secondary_keywords, ai_provider_used, source_rewrite_job_id`;
+export const ARTICLE_DETAIL_COLUMNS = `${ARTICLE_SUMMARY_COLUMNS}, content_markdown, cover_image_credit, cover_media_source_type, cover_media_credit, cover_media_disclosure, cover_depicts_actual_location, cover_depicts_actual_event, seo_title, meta_description, primary_keyword, secondary_keywords, schema_type, ai_provider_used, source_rewrite_job_id`;
 
 type SummaryRow = Pick<
   ArticleRow,
@@ -190,6 +191,9 @@ export function mapArticleDetail(
     metaDescription: row.meta_description,
     primaryKeyword: row.primary_keyword,
     secondaryKeywords: row.secondary_keywords ?? [],
+    schemaType: isArticleSchemaType(row.schema_type)
+      ? row.schema_type
+      : "NewsArticle",
     aiProviderUsed: row.ai_provider_used,
     sourceRewriteJobId: row.source_rewrite_job_id,
     sources: sources.map(mapArticleSource),
